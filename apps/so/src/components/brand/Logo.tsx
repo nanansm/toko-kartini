@@ -20,7 +20,7 @@ export function Logo({
   showText = false,
   className,
 }: LogoProps) {
-  const src = variant === 'light' ? '/blacklogo.png' : '/whitelogo.png';
+  const src = variant === 'light' ? '/blacklogo.png' : '/blacklogo.png';
   const { w, h, text } = SIZES[size];
 
   return (

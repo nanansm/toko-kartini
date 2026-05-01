@@ -7,6 +7,8 @@ import {
   RefreshCw,
   UserCog,
   Settings,
+  Boxes,
+  ArrowRightLeft,
   type LucideIcon,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/roles';
@@ -23,6 +25,18 @@ export const NAV_ITEMS: NavItem[] = [
     label: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Stok',
+    href: '/inventory',
+    icon: Boxes,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Movement',
+    href: '/movements',
+    icon: ArrowRightLeft,
     roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
   },
   {

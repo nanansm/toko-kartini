@@ -2,14 +2,14 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Package, RefreshCw, Truck, User } from 'lucide-react';
+import { Home, Package, ArrowRightLeft, Boxes, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ITEMS = [
   { label: 'Home', href: '/dashboard', icon: Home, primary: false },
+  { label: 'Stok', href: '/inventory', icon: Boxes, primary: false },
+  { label: 'Movement', href: '/movements/transfer', icon: ArrowRightLeft, primary: true },
   { label: 'Produk', href: '/master/products', icon: Package, primary: false },
-  { label: 'Sync', href: '/sync', icon: RefreshCw, primary: true },
-  { label: 'Supplier', href: '/master/suppliers', icon: Truck, primary: false },
   { label: 'Saya', href: '/profile', icon: User, primary: false },
 ] as const;
 

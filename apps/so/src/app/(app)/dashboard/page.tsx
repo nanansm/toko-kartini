@@ -8,7 +8,8 @@ import {
   Users,
   MapPin,
   TrendingUp,
-  RefreshCw,
+  ArrowRightLeft,
+  Boxes,
   type LucideIcon,
 } from 'lucide-react';
 import { requireAuth } from '@/lib/session';
@@ -111,22 +112,22 @@ export default async function DashboardPage() {
         <h2 className="text-lg font-semibold text-stone-900 mb-3">Akses Cepat</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <QuickActionCard
+            title="Stok per Lokasi"
+            description="Lihat stok di tiap lokasi fisik"
+            icon={Boxes}
+            href="/inventory"
+          />
+          <QuickActionCard
             title="Lihat Master Produk"
             description={`${(productsCount[0]?.count ?? 0).toLocaleString('id-ID')} produk tersedia`}
             icon={Package}
             href="/master/products"
           />
           <QuickActionCard
-            title="Daftar Supplier"
-            description={`${(suppliersCount[0]?.count ?? 0).toLocaleString('id-ID')} supplier`}
-            icon={Truck}
-            href="/master/suppliers"
-          />
-          <QuickActionCard
-            title="Sinkronisasi"
-            description="Tarik data terbaru dari Sheet"
-            icon={RefreshCw}
-            href="/sync"
+            title="Movement Baru"
+            description="Transfer, pembelian, adjustment"
+            icon={ArrowRightLeft}
+            href="/movements"
             primary
           />
         </div>
