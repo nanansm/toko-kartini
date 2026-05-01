@@ -4,9 +4,7 @@ const config: NextConfig = {
   reactStrictMode: true,
   // Transpile workspace packages
   transpilePackages: ['@kartini/db', '@kartini/auth', '@kartini/ui', '@kartini/sheets'],
-  experimental: {
-    typedRoutes: true,
-  },
+  // typedRoutes disabled — too strict for dynamic segments at this stage
   output: 'standalone',
 };
 

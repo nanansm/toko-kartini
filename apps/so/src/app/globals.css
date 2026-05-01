@@ -1,12 +1,118 @@
 @import 'tailwindcss';
+@import 'tw-animate-css';
 
-@theme {
-  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  --color-kartini-primary: #1f4e78;
-  --color-kartini-accent: #ed7d31;
+@custom-variant dark (&:is(.dark *));
+
+/* === BRAND TOKENS === */
+:root {
+  /* Brand */
+  --kartini-green: #0f7a3e;
+  --kartini-green-dark: #0a5c2e;
+  --kartini-green-light: #e8f5ee;
+  --kartini-orange: #f26b1f;
+  --kartini-orange-dark: #d85710;
+  --kartini-orange-light: #fff1e6;
+  --kartini-red: #e63946;
+
+  /* shadcn/ui semantic tokens — mapped so buttons/badges inherit brand */
+  --background: #fafaf9;
+  --foreground: #1c1917;
+  --card: #ffffff;
+  --card-foreground: #1c1917;
+  --popover: #ffffff;
+  --popover-foreground: #1c1917;
+  --primary: #0f7a3e;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f4;
+  --secondary-foreground: #292524;
+  --muted: #f5f5f4;
+  --muted-foreground: #78716c;
+  --accent: #f5f5f4;
+  --accent-foreground: #292524;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --border: #e7e5e4;
+  --input: #e7e5e4;
+  --ring: #0f7a3e;
+  --radius: 0.625rem;
+
+  /* Soft shadows */
+  --shadow-soft-sm: 0 1px 2px 0 rgb(0 0 0 / 0.04);
+  --shadow-soft-md: 0 2px 8px -2px rgb(0 0 0 / 0.06);
+  --shadow-soft-lg: 0 8px 24px -8px rgb(0 0 0 / 0.08);
 }
 
-html,
-body {
-  font-family: var(--font-sans);
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-kartini-green: var(--kartini-green);
+  --color-kartini-green-dark: var(--kartini-green-dark);
+  --color-kartini-green-light: var(--kartini-green-light);
+  --color-kartini-orange: var(--kartini-orange);
+  --color-kartini-orange-dark: var(--kartini-orange-dark);
+  --color-kartini-orange-light: var(--kartini-orange-light);
+  --color-kartini-red: var(--kartini-red);
+
+  --shadow-soft-sm: var(--shadow-soft-sm);
+  --shadow-soft-md: var(--shadow-soft-md);
+  --shadow-soft-lg: var(--shadow-soft-lg);
+
+  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* === Base === */
+@layer base {
+  * {
+    @apply border-border;
+  }
+  html,
+  body {
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  *:focus-visible {
+    outline: 2px solid var(--kartini-green);
+    outline-offset: 2px;
+  }
+}
+
+/* === Utilities === */
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+.scrollbar-hide {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
 }
