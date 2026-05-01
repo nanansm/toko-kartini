@@ -1,0 +1,27 @@
+{
+  "name": "toko-kartini",
+  "version": "0.0.1",
+  "private": true,
+  "packageManager": "pnpm@9.12.0",
+  "scripts": {
+    "build": "turbo build",
+    "dev": "turbo dev",
+    "lint": "turbo lint",
+    "type-check": "turbo type-check",
+    "db:generate": "pnpm --filter @kartini/db generate",
+    "db:migrate": "pnpm --filter @kartini/db migrate",
+    "db:studio": "pnpm --filter @kartini/db studio",
+    "db:seed": "pnpm --filter @kartini/db seed",
+    "sheets:sync": "pnpm --filter @kartini/sheets sync"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "typescript": "^5.7.2",
+    "prettier": "^3.4.2",
+    "@types/node": "^22.10.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  }
+}

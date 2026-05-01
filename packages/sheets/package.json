@@ -1,0 +1,22 @@
+{
+  "name": "@kartini/sheets",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "sync": "tsx src/sync.ts",
+    "type-check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "googleapis": "^144.0.0",
+    "@kartini/db": "workspace:*",
+    "drizzle-orm": "^0.45.2",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

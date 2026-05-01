@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1777650879745,
+      "tag": "0000_shiny_blizzard",
+      "breakpoints": true
+    }
+  ]
+}
