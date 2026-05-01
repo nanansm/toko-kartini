@@ -1,0 +1,70 @@
+import {
+  LayoutDashboard,
+  Package,
+  Truck,
+  Users,
+  Tags,
+  RefreshCw,
+  UserCog,
+  Settings,
+  type LucideIcon,
+} from 'lucide-react';
+import type { UserRole } from '@/lib/roles';
+
+export interface NavItem {
+  label: string;
+  href: string;
+  icon: LucideIcon;
+  roles: UserRole[];
+}
+
+export const NAV_ITEMS: NavItem[] = [
+  {
+    label: 'Dashboard',
+    href: '/dashboard',
+    icon: LayoutDashboard,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Produk',
+    href: '/master/products',
+    icon: Package,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Supplier',
+    href: '/master/suppliers',
+    icon: Truck,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR'],
+  },
+  {
+    label: 'Customer',
+    href: '/master/customers',
+    icon: Users,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR'],
+  },
+  {
+    label: 'Kategori',
+    href: '/master/categories',
+    icon: Tags,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Sinkronisasi',
+    href: '/sync',
+    icon: RefreshCw,
+    roles: ['OWNER', 'ADMIN'],
+  },
+  {
+    label: 'Pengguna',
+    href: '/users',
+    icon: UserCog,
+    roles: ['OWNER'],
+  },
+  {
+    label: 'Pengaturan',
+    href: '/settings',
+    icon: Settings,
+    roles: ['OWNER'],
+  },
+];
