@@ -9,6 +9,8 @@ import {
   Settings,
   Boxes,
   ArrowRightLeft,
+  ClipboardCheck,
+  FileSpreadsheet,
   type LucideIcon,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/roles';
@@ -38,6 +40,18 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/movements',
     icon: ArrowRightLeft,
     roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Stock Opname',
+    href: '/so',
+    icon: ClipboardCheck,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Import Olsera',
+    href: '/olsera-import',
+    icon: FileSpreadsheet,
+    roles: ['OWNER', 'ADMIN'],
   },
   {
     label: 'Produk',

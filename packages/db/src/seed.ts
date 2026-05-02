@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { db, locations } from './index';
+import { db, locations, systemSettings } from './index';
 
 async function seed() {
   console.log('🌱 Seeding initial data...');
@@ -40,6 +40,33 @@ async function seed() {
     .onConflictDoNothing();
 
   console.log('✓ Locations seeded');
+
+  // Default system settings (threshold SO + Olsera default location)
+  await db
+    .insert(systemSettings)
+    .values([
+      {
+        key: 'so_threshold_low_pct',
+        value: '5',
+        description: 'Selisih SO < X% per item: auto-approve saat session di-submit',
+        category: 'so',
+      },
+      {
+        key: 'so_threshold_high_pct',
+        value: '20',
+        description: 'Selisih SO >= X% per item: mandatory re-count, block submit',
+        category: 'so',
+      },
+      {
+        key: 'olsera_default_location_id',
+        value: 'LOC-01',
+        description: 'Default lokasi tujuan SALE_OUT dari Olsera (Toko)',
+        category: 'olsera',
+      },
+    ])
+    .onConflictDoNothing();
+  console.log('✓ System settings seeded');
+
   console.log('🌱 Seeding done');
   process.exit(0);
 }

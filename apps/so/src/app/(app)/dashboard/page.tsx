@@ -1,6 +1,14 @@
 import Link from 'next/link';
-import { db, products, suppliers, customers, locations } from '@kartini/db';
-import { count, eq } from 'drizzle-orm';
+import {
+  db,
+  products,
+  suppliers,
+  customers,
+  locations,
+  stockCountSessions,
+  olseraImportLogs,
+} from '@kartini/db';
+import { count, eq, inArray, gte, sum, desc, and } from 'drizzle-orm';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Package,
@@ -10,20 +18,80 @@ import {
   TrendingUp,
   ArrowRightLeft,
   Boxes,
+  ClipboardCheck,
+  CheckCircle2,
+  FileSpreadsheet,
   type LucideIcon,
 } from 'lucide-react';
 import { requireAuth } from '@/lib/session';
 import { cn } from '@/lib/utils';
 
+function formatRupiahShort(num: number): string {
+  if (num === 0) return 'Rp 0';
+  const sign = num < 0 ? '-' : '';
+  return (
+    sign +
+    new Intl.NumberFormat('id-ID', {
+      style: 'currency',
+      currency: 'IDR',
+      maximumFractionDigits: 0,
+    }).format(Math.abs(num))
+  );
+}
+
 export default async function DashboardPage() {
   const user = await requireAuth();
 
-  const [productsCount, suppliersCount, customersCount, locationsCount] = await Promise.all([
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+
+  const [
+    productsCount,
+    suppliersCount,
+    customersCount,
+    locationsCount,
+    soActiveRows,
+    soThisMonthRows,
+    lastOlseraRows,
+  ] = await Promise.all([
     db.select({ count: count() }).from(products).where(eq(products.isActive, true)),
     db.select({ count: count() }).from(suppliers).where(eq(suppliers.isActive, true)),
     db.select({ count: count() }).from(customers).where(eq(customers.isActive, true)),
     db.select({ count: count() }).from(locations).where(eq(locations.isActive, true)),
+    db
+      .select({ count: count() })
+      .from(stockCountSessions)
+      .where(
+        inArray(stockCountSessions.status, ['DRAFT', 'IN_PROGRESS', 'SUBMITTED']),
+      ),
+    db
+      .select({
+        count: count(),
+        totalDiff: sum(stockCountSessions.totalDifferenceValueRp),
+      })
+      .from(stockCountSessions)
+      .where(
+        and(
+          eq(stockCountSessions.status, 'APPROVED'),
+          gte(stockCountSessions.approvedAt, monthStart),
+        ),
+      ),
+    db
+      .select({
+        committedAt: olseraImportLogs.committedAt,
+        movementsCreated: olseraImportLogs.movementsCreated,
+      })
+      .from(olseraImportLogs)
+      .where(eq(olseraImportLogs.status, 'COMMITTED'))
+      .orderBy(desc(olseraImportLogs.committedAt))
+      .limit(1),
   ]);
+
+  const soActive = soActiveRows[0]?.count ?? 0;
+  const soThisMonth = soThisMonthRows[0]?.count ?? 0;
+  const soThisMonthDiff = Number(soThisMonthRows[0]?.totalDiff ?? 0);
+  const lastOlsera = lastOlseraRows[0];
 
   const stats = [
     {
@@ -91,22 +159,82 @@ export default async function DashboardPage() {
         })}
       </div>
 
-      <Card className="bg-gradient-to-br from-kartini-green-light to-stone-50 border-kartini-green/20 py-5 gap-3">
-        <CardContent className="px-5 lg:px-6">
-          <div className="flex items-start gap-4">
-            <div className="w-12 h-12 rounded-xl bg-kartini-green text-white flex items-center justify-center flex-shrink-0">
-              <TrendingUp className="w-6 h-6" />
-            </div>
-            <div className="flex-1">
-              <h3 className="font-semibold text-stone-900">Phase 1: Master Data Ready</h3>
-              <p className="text-sm text-stone-600 mt-1">
-                Master produk, supplier, dan customer sudah ter-sync dari Google Sheet. Modul Stock
-                Opname (Movement, SO Mingguan, Bulanan) akan dibangun di Week 3-5.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      {/* Operasional cards: SO + Olsera */}
+      <div>
+        <h2 className="text-lg font-semibold text-stone-900 mb-3 flex items-center gap-2">
+          <TrendingUp className="w-5 h-5 text-kartini-green" />
+          Operasional
+        </h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Link href="/so" className="block">
+            <Card className="border-stone-200 shadow-soft-sm py-4 gap-2 hover:border-kartini-green/30 transition">
+              <CardContent className="px-4 lg:px-5">
+                <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center mb-2">
+                  <ClipboardCheck className="w-5 h-5 text-blue-600" />
+                </div>
+                <div className="text-2xl font-bold text-stone-900 tabular-nums">
+                  {soActive.toLocaleString('id-ID')}
+                </div>
+                <div className="text-xs text-stone-500 mt-0.5">SO Aktif</div>
+                <div className="text-[10px] text-stone-400 mt-1">
+                  Draft / In Progress / Menunggu approval
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/so?status=APPROVED" className="block">
+            <Card className="border-stone-200 shadow-soft-sm py-4 gap-2 hover:border-kartini-green/30 transition">
+              <CardContent className="px-4 lg:px-5">
+                <div className="w-10 h-10 rounded-lg bg-green-50 flex items-center justify-center mb-2">
+                  <CheckCircle2 className="w-5 h-5 text-green-600" />
+                </div>
+                <div className="text-2xl font-bold text-stone-900 tabular-nums">
+                  {soThisMonth.toLocaleString('id-ID')}
+                </div>
+                <div className="text-xs text-stone-500 mt-0.5">SO Selesai Bulan Ini</div>
+                <div
+                  className={cn(
+                    'text-[10px] mt-1 tabular-nums',
+                    soThisMonthDiff < 0
+                      ? 'text-red-600'
+                      : soThisMonthDiff > 0
+                        ? 'text-green-600'
+                        : 'text-stone-400',
+                  )}
+                >
+                  Selisih nilai: {formatRupiahShort(soThisMonthDiff)}
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/olsera-import" className="block">
+            <Card className="border-stone-200 shadow-soft-sm py-4 gap-2 hover:border-kartini-green/30 transition">
+              <CardContent className="px-4 lg:px-5">
+                <div className="w-10 h-10 rounded-lg bg-amber-50 flex items-center justify-center mb-2">
+                  <FileSpreadsheet className="w-5 h-5 text-amber-600" />
+                </div>
+                <div className="text-sm font-bold text-stone-900">
+                  {lastOlsera?.committedAt
+                    ? new Date(lastOlsera.committedAt).toLocaleDateString('id-ID', {
+                        day: '2-digit',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : 'Belum pernah'}
+                </div>
+                <div className="text-xs text-stone-500 mt-0.5">Sync Olsera Terakhir</div>
+                <div className="text-[10px] text-stone-400 mt-1">
+                  {lastOlsera
+                    ? `${lastOlsera.movementsCreated.toLocaleString('id-ID')} movements`
+                    : 'Upload Excel sales report'}
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+        </div>
+      </div>
 
       <div>
         <h2 className="text-lg font-semibold text-stone-900 mb-3">Akses Cepat</h2>
@@ -118,16 +246,16 @@ export default async function DashboardPage() {
             href="/inventory"
           />
           <QuickActionCard
-            title="Lihat Master Produk"
-            description={`${(productsCount[0]?.count ?? 0).toLocaleString('id-ID')} produk tersedia`}
-            icon={Package}
-            href="/master/products"
-          />
-          <QuickActionCard
-            title="Movement Baru"
+            title="Movement"
             description="Transfer, pembelian, adjustment"
             icon={ArrowRightLeft}
             href="/movements"
+          />
+          <QuickActionCard
+            title="Mulai SO Baru"
+            description="Hitung stok fisik vs sistem"
+            icon={ClipboardCheck}
+            href="/so/new"
             primary
           />
         </div>

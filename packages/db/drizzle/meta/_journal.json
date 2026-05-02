@@ -8,6 +8,13 @@
       "when": 1777650879745,
       "tag": "0000_shiny_blizzard",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1777714718592,
+      "tag": "0001_groovy_zodiak",
+      "breakpoints": true
     }
   ]
 }

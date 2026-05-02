@@ -293,8 +293,8 @@ export async function createPurchaseIn(input: {
     }
     const breakdownStr = breakdown.map((b) => `${b.qty} ${b.unitName}`).join(' + ');
 
-    const movementId = await db.transaction(async (tx) =>
-      applyMovementInTx(
+    const movementId = await db.transaction(async (tx) => {
+      const id = await applyMovementInTx(
         tx,
         {
           productId: input.productId,
@@ -311,8 +311,36 @@ export async function createPurchaseIn(input: {
             `Pembelian (ref: ${input.invoiceRef ?? '-'}, supplier: ${input.supplierId ?? '-'})`,
         },
         user.id,
-      ),
-    );
+      );
+
+      // Weighted Average HPP: hitung di dalam transaksi yang sama supaya konsisten
+      // dengan stock_balance yang sudah di-update di applyMovementInTx.
+      // Formula: avg = SUM(qty_per_lokasi × avg_hpp_per_lokasi) / SUM(qty_per_lokasi)
+      if (input.hppPerBase) {
+        const balances = await tx
+          .select({
+            qtyInBase: stockBalances.qtyInBase,
+            avgHpp: stockBalances.avgHpp,
+          })
+          .from(stockBalances)
+          .where(eq(stockBalances.productId, input.productId));
+
+        const totalQty = balances.reduce((sum, b) => sum + Number(b.qtyInBase), 0);
+        const totalValue = balances.reduce(
+          (sum, b) => sum + Number(b.qtyInBase) * Number(b.avgHpp ?? 0),
+          0,
+        );
+
+        const newAvgHpp = totalQty > 0 ? totalValue / totalQty : input.hppPerBase;
+
+        await tx
+          .update(products)
+          .set({ currentAvgHpp: newAvgHpp.toString(), updatedAt: new Date() })
+          .where(eq(products.id, input.productId));
+      }
+
+      return id;
+    });
 
     revalidateInventoryPaths();
     return { ok: true as const, movementId, totalBase };

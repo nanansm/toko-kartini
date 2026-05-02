@@ -28,10 +28,20 @@ export const soSessionTypeEnum = inventorySchema.enum('so_session_type', [
 ]);
 export const soSessionStatusEnum = inventorySchema.enum('so_session_status', [
   'DRAFT',
+  'IN_PROGRESS',
   'SUBMITTED',
   'APPROVED',
   'REJECTED',
   'CANCELLED',
+]);
+export const soItemStatusEnum = inventorySchema.enum('so_item_status', [
+  'PENDING', // Belum di-count
+  'COUNTED', // Sudah di-input qty fisik
+  'NEEDS_RECOUNT', // Selisih > threshold tinggi, harus re-count
+  'AUTO_APPROVED', // Selisih < threshold rendah, auto-OK
+  'PENDING_APPROVAL', // Selisih medium, perlu supervisor approve
+  'APPROVED', // Sudah di-approve supervisor
+  'REJECTED', // Di-reject supervisor
 ]);
 
 // Lokasi fisik (3 lokasi)
@@ -266,16 +276,96 @@ export const stockCountItems = inventorySchema.table(
     // Selisih
     differenceBase: decimal('difference_base', { precision: 14, scale: 2 }),
     differenceValueRp: decimal('difference_value_rp', { precision: 14, scale: 2 }),
-    // Status
+    differencePercent: decimal('difference_percent', { precision: 8, scale: 2 }),
+    // Legacy flag (deprecated Week 4 in favor of `status`, retained untuk back-compat data)
     isCounted: boolean('is_counted').notNull().default(false),
+    // Status & Approval (Week 4)
+    status: soItemStatusEnum('status').notNull().default('PENDING'),
+    approvalReason: text('approval_reason'),
+    rejectionReason: text('rejection_reason'),
+    approvedBy: text('approved_by'),
+    approvedAt: timestamp('approved_at'),
+    rejectedBy: text('rejected_by'),
+    rejectedAt: timestamp('rejected_at'),
+    recountCount: integer('recount_count').notNull().default(0),
     notes: text('notes'),
     countedBy: text('counted_by'),
     countedAt: timestamp('counted_at'),
+    // Generated movement reference (saat approved)
+    generatedMovementId: text('generated_movement_id'),
     createdAt: timestamp('created_at').notNull().defaultNow(),
     updatedAt: timestamp('updated_at').notNull().defaultNow(),
   },
   (t) => ({
     uniqSessionProduct: uniqueIndex('uniq_so_session_product').on(t.sessionId, t.productId),
     idxSession: index('idx_so_item_session').on(t.sessionId),
+    idxStatus: index('idx_so_item_status').on(t.status),
+  }),
+);
+
+// Konfigurasi sistem yang bisa diubah OWNER (threshold SO, default location, dll)
+export const systemSettings = inventorySchema.table('system_settings', {
+  key: text('key').primaryKey(),
+  value: text('value').notNull(),
+  description: text('description'),
+  category: text('category').notNull().default('general'),
+  updatedBy: text('updated_by'),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+});
+
+// Log riwayat import sales Olsera dari file Excel
+export const olseraImportLogs = inventorySchema.table('olsera_import_logs', {
+  id: text('id').primaryKey(),
+  fileName: text('file_name').notNull(),
+  fileSize: integer('file_size'),
+  fileMd5: text('file_md5'),
+  // Periode data Olsera (kalau bisa di-detect dari file)
+  periodFrom: timestamp('period_from'),
+  periodTo: timestamp('period_to'),
+  // Stats
+  totalRows: integer('total_rows').notNull().default(0),
+  movementsCreated: integer('movements_created').notNull().default(0),
+  rowsSkipped: integer('rows_skipped').notNull().default(0),
+  rowsError: integer('rows_error').notNull().default(0),
+  totalValueRp: decimal('total_value_rp', { precision: 14, scale: 2 }),
+  // Status
+  status: text('status', {
+    enum: ['PROCESSING', 'PREVIEW', 'COMMITTED', 'FAILED', 'CANCELLED'],
+  }).notNull(),
+  errorMessage: text('error_message'),
+  // Audit
+  uploadedBy: text('uploaded_by').notNull(),
+  uploadedAt: timestamp('uploaded_at').notNull().defaultNow(),
+  committedBy: text('committed_by'),
+  committedAt: timestamp('committed_at'),
+});
+
+// Staging rows untuk Olsera import (dipakai saat preview → commit)
+// Disimpan supaya commit tidak butuh upload ulang dari client
+export const olseraImportStaging = inventorySchema.table(
+  'olsera_import_staging',
+  {
+    id: text('id').primaryKey(),
+    importLogId: text('import_log_id')
+      .notNull()
+      .references(() => olseraImportLogs.id, { onDelete: 'cascade' }),
+    rowIndex: integer('row_index').notNull(),
+    orderNo: text('order_no').notNull(),
+    productId: text('product_id')
+      .notNull()
+      .references(() => products.id),
+    locationId: text('location_id')
+      .notNull()
+      .references(() => locations.id),
+    qtyInBase: decimal('qty_in_base', { precision: 14, scale: 2 }).notNull(),
+    unitNameUsed: text('unit_name_used').notNull(),
+    qtyInUnitUsed: decimal('qty_in_unit_used', { precision: 14, scale: 2 }).notNull(),
+    hppAtMovement: decimal('hpp_at_movement', { precision: 14, scale: 2 }),
+    totalValueRp: decimal('total_value_rp', { precision: 14, scale: 2 }),
+    rawRow: text('raw_row'), // JSON sample
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => ({
+    idxLog: index('idx_olsera_staging_log').on(t.importLogId),
   }),
 );

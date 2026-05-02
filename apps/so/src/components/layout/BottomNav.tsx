@@ -2,14 +2,20 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, Package, ArrowRightLeft, Boxes, User } from 'lucide-react';
+import {
+  Home,
+  ArrowRightLeft,
+  Boxes,
+  User,
+  ClipboardCheck,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 const ITEMS = [
   { label: 'Home', href: '/dashboard', icon: Home, primary: false },
   { label: 'Stok', href: '/inventory', icon: Boxes, primary: false },
-  { label: 'Movement', href: '/movements/transfer', icon: ArrowRightLeft, primary: true },
-  { label: 'Produk', href: '/master/products', icon: Package, primary: false },
+  { label: 'SO Baru', href: '/so/new', icon: ClipboardCheck, primary: true },
+  { label: 'Movement', href: '/movements', icon: ArrowRightLeft, primary: false },
   { label: 'Saya', href: '/profile', icon: User, primary: false },
 ] as const;
 
