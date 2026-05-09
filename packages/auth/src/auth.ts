@@ -9,6 +9,12 @@ export const auth = betterAuth({
   }),
   baseURL: process.env.BETTER_AUTH_URL ?? 'http://localhost:3010',
   secret: process.env.BETTER_AUTH_SECRET!,
+  emailAndPassword: {
+    enabled: true,
+    autoSignIn: true,
+    minPasswordLength: 6,
+    requireEmailVerification: false,
+  },
   socialProviders: {
     google: {
       clientId: process.env.GOOGLE_CLIENT_ID!,
@@ -39,7 +45,11 @@ export const auth = betterAuth({
     expiresIn: 60 * 60 * 24 * 7, // 7 hari
     updateAge: 60 * 60 * 24, // refresh setiap 24 jam
   },
+  trustedOrigins: [
+    process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3010',
+  ],
 });
 
+export type Auth = typeof auth;
 export type Session = typeof auth.$Infer.Session;
 export type User = typeof auth.$Infer.Session.user;

@@ -1,4 +1,4 @@
-import { UserCog, Plus, Lightbulb } from 'lucide-react';
+import { UserCog, Lightbulb } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -6,6 +6,8 @@ import { getAllUsers } from '@/lib/queries/users';
 import { ROLE_LABEL, type UserRole } from '@/lib/roles';
 import { requireRole } from '@/lib/session';
 import { cn } from '@/lib/utils';
+import { AddUserDialog } from './_components/AddUserDialog';
+import { UserActionsMenu } from './_components/UserActionsMenu';
 
 const ROLE_BADGE: Record<UserRole, string> = {
   OWNER: 'bg-kartini-green text-white border-0',
@@ -30,7 +32,7 @@ function getInitials(name: string): string {
 }
 
 export default async function UsersPage() {
-  await requireRole(['OWNER']);
+  const currentUser = await requireRole(['OWNER']);
   const users = await getAllUsers();
 
   return (
@@ -46,15 +48,7 @@ export default async function UsersPage() {
           </p>
         </div>
 
-        <button
-          type="button"
-          disabled
-          title="Tambah user akan dibuat di Phase 2 — sementara user otomatis ter-create saat login Google pertama kali"
-          className="inline-flex items-center gap-2 h-10 px-4 rounded-lg bg-kartini-green text-white font-semibold text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          <Plus className="w-4 h-4" />
-          Tambah Pengguna
-        </button>
+        <AddUserDialog />
       </div>
 
       {users.length === 0 ? (
@@ -88,11 +82,15 @@ export default async function UsersPage() {
                   <th className="px-4 py-3 font-semibold text-stone-600 text-xs uppercase tracking-wide">
                     Bergabung
                   </th>
+                  <th className="px-4 py-3 font-semibold text-stone-600 text-xs uppercase tracking-wide w-12">
+                    <span className="sr-only">Aksi</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
                 {users.map((u) => {
                   const role = u.role as UserRole;
+                  const isCurrent = u.id === currentUser.id;
                   return (
                     <tr key={u.id} className="hover:bg-stone-50 transition">
                       <td className="px-4 py-3">
@@ -104,7 +102,14 @@ export default async function UsersPage() {
                             </AvatarFallback>
                           </Avatar>
                           <div className="min-w-0">
-                            <div className="font-medium text-stone-900 truncate">{u.name}</div>
+                            <div className="font-medium text-stone-900 truncate flex items-center gap-1.5">
+                              {u.name}
+                              {isCurrent && (
+                                <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded font-normal">
+                                  Anda
+                                </span>
+                              )}
+                            </div>
                             <div className="text-xs text-stone-500 truncate">{u.email}</div>
                           </div>
                         </div>
@@ -143,6 +148,15 @@ export default async function UsersPage() {
                       <td className="px-4 py-3 text-xs text-stone-500">
                         {dateFmt.format(new Date(u.createdAt))}
                       </td>
+                      <td className="px-4 py-3 text-right">
+                        {!isCurrent && (
+                          <UserActionsMenu
+                            userId={u.id}
+                            userName={u.name}
+                            currentRole={role}
+                          />
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
@@ -154,6 +168,7 @@ export default async function UsersPage() {
           <div className="md:hidden divide-y divide-stone-100">
             {users.map((u) => {
               const role = u.role as UserRole;
+              const isCurrent = u.id === currentUser.id;
               return (
                 <div key={u.id} className="p-4 space-y-3">
                   <div className="flex items-start gap-3">
@@ -164,12 +179,26 @@ export default async function UsersPage() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <div className="font-medium text-stone-900 truncate">{u.name}</div>
+                      <div className="font-medium text-stone-900 truncate flex items-center gap-1.5">
+                        {u.name}
+                        {isCurrent && (
+                          <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded font-normal">
+                            Anda
+                          </span>
+                        )}
+                      </div>
                       <div className="text-xs text-stone-500 truncate">{u.email}</div>
                     </div>
                     <Badge className={cn(ROLE_BADGE[role], 'flex-shrink-0')}>
                       {ROLE_LABEL[role]}
                     </Badge>
+                    {!isCurrent && (
+                      <UserActionsMenu
+                        userId={u.id}
+                        userName={u.name}
+                        currentRole={role}
+                      />
+                    )}
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2 text-xs">

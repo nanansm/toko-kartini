@@ -175,6 +175,12 @@ importers:
 
   packages/db:
     dependencies:
+      '@paralleldrive/cuid2':
+        specifier: ^3.3.0
+        version: 3.3.0
+      better-auth:
+        specifier: ^1.1.0
+        version: 1.6.9(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(kysely@0.28.16)(postgres@3.4.9))(next@15.1.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       dotenv:
         specifier: ^16.4.7
         version: 16.6.1
