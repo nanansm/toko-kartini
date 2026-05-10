@@ -11,6 +11,7 @@ import {
   ArrowRightLeft,
   ClipboardCheck,
   FileSpreadsheet,
+  BarChart3,
   type LucideIcon,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/roles';
@@ -46,6 +47,12 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/so',
     icon: ClipboardCheck,
     roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Laporan',
+    href: '/reports',
+    icon: BarChart3,
+    roles: ['OWNER', 'ADMIN', 'SUPERVISOR'],
   },
   {
     label: 'Import Olsera',
