@@ -15,6 +15,13 @@
       "when": 1777714718592,
       "tag": "0001_groovy_zodiak",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1778394587827,
+      "tag": "0002_premium_logan",
+      "breakpoints": true
     }
   ]
 }

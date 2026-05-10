@@ -21,6 +21,64 @@ importers:
         specifier: ^5.7.2
         version: 5.9.3
 
+  apps/pos:
+    dependencies:
+      '@kartini/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
+      '@kartini/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@kartini/ui':
+        specifier: workspace:*
+        version: link:../../packages/ui
+      better-auth:
+        specifier: ^1.1.0
+        version: 1.6.9(drizzle-kit@0.31.10)(drizzle-orm@0.45.2(kysely@0.28.16)(postgres@3.4.9))(next@15.1.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5))(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.2(kysely@0.28.16)(postgres@3.4.9)
+      lucide-react:
+        specifier: ^0.460.0
+        version: 0.460.0(react@19.2.5)
+      next:
+        specifier: 15.1.0
+        version: 15.1.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      postgres:
+        specifier: ^3.4.5
+        version: 3.4.9
+      react:
+        specifier: ^19.0.0
+        version: 19.2.5
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.2.5(react@19.2.5)
+      sonner:
+        specifier: ^1.7.1
+        version: 1.7.4(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+    devDependencies:
+      '@tailwindcss/postcss':
+        specifier: ^4.2.4
+        version: 4.2.4
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.19.17
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.2.3(@types/react@19.2.14)
+      postcss:
+        specifier: ^8.4.49
+        version: 8.5.13
+      tailwindcss:
+        specifier: ^4.2.4
+        version: 4.2.4
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   apps/so:
     dependencies:
       '@hookform/resolvers':

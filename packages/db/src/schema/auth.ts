@@ -8,7 +8,7 @@ export const users = authSchema.table('users', {
   emailVerified: boolean('email_verified').notNull().default(false),
   image: text('image'),
   // Custom fields untuk Toko Kartini
-  role: text('role', { enum: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'] })
+  role: text('role', { enum: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG', 'KASIR'] })
     .notNull()
     .default('STAF_GUDANG'),
   assignedLocations: text('assigned_locations').array(), // ['LOC-01', 'LOC-02']

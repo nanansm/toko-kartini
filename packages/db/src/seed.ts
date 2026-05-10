@@ -1,5 +1,5 @@
 import 'dotenv/config';
-import { db, locations, systemSettings } from './index';
+import { db, locations, systemSettings, paymentMethods, receiptConfig } from './index';
 
 async function seed() {
   console.log('🌱 Seeding initial data...');
@@ -66,6 +66,45 @@ async function seed() {
     ])
     .onConflictDoNothing();
   console.log('✓ System settings seeded');
+
+  // Payment methods (POS)
+  await db
+    .insert(paymentMethods)
+    .values([
+      { type: 'CASH', name: 'Tunai', isEnabled: true, sortOrder: 1 },
+      {
+        type: 'TRANSFER',
+        name: 'Transfer Bank',
+        isEnabled: true,
+        sortOrder: 2,
+        notes: 'BCA 1234567890 a/n CV Kartini Boga Nusantara',
+      },
+      {
+        type: 'QRIS',
+        name: 'QRIS',
+        isEnabled: true,
+        sortOrder: 3,
+        notes: 'Scan QR di meja kasir',
+      },
+      { type: 'CARD', name: 'Kartu Debit/Kredit', isEnabled: false, sortOrder: 4 },
+      { type: 'TEMPO', name: 'Tempo / Kredit', isEnabled: false, sortOrder: 5 },
+    ])
+    .onConflictDoNothing();
+  console.log('✓ Payment methods seeded');
+
+  // Receipt config (POS)
+  await db
+    .insert(receiptConfig)
+    .values({
+      storeName: 'TOKO KARTINI',
+      storeAddress: 'Jl. R.A. Kartini No.08, Sumedang',
+      storePhone: '(0261) XXXXXX',
+      footerText:
+        'Terima kasih telah berbelanja!\nBarang yang sudah dibeli tidak dapat dikembalikan\ntanpa struk pembelian.',
+      paperWidth: 80,
+    })
+    .onConflictDoNothing();
+  console.log('✓ Receipt config seeded');
 
   console.log('🌱 Seeding done');
   process.exit(0);

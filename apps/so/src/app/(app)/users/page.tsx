@@ -14,6 +14,7 @@ const ROLE_BADGE: Record<UserRole, string> = {
   ADMIN: 'bg-kartini-orange text-white border-0',
   SUPERVISOR: 'bg-blue-600 text-white border-0',
   STAF_GUDANG: 'bg-stone-200 text-stone-700 border-0',
+  KASIR: 'bg-purple-100 text-purple-700 border-0',
 };
 
 const dateFmt = new Intl.DateTimeFormat('id-ID', {

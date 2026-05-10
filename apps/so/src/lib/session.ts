@@ -3,7 +3,7 @@ import { auth } from '@kartini/auth';
 import { headers } from 'next/headers';
 import { redirect } from 'next/navigation';
 
-export type UserRole = 'OWNER' | 'ADMIN' | 'SUPERVISOR' | 'STAF_GUDANG';
+export type UserRole = 'OWNER' | 'ADMIN' | 'SUPERVISOR' | 'STAF_GUDANG' | 'KASIR';
 
 export interface SessionUser {
   id: string;
@@ -56,4 +56,10 @@ export const PERMISSIONS = {
   TRIGGER_SYNC: ['OWNER', 'ADMIN'] as UserRole[],
   CREATE_SO: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'] as UserRole[],
   APPROVE_SO: ['OWNER', 'ADMIN', 'SUPERVISOR'] as UserRole[],
+  // POS (Phase 2+)
+  ACCESS_POS: ['OWNER', 'ADMIN', 'SUPERVISOR', 'KASIR'] as UserRole[],
+  OPEN_SHIFT: ['OWNER', 'ADMIN', 'SUPERVISOR', 'KASIR'] as UserRole[],
+  APPROVE_RETURN: ['OWNER', 'SUPERVISOR'] as UserRole[],
+  OVERRIDE_PRICE: ['OWNER', 'ADMIN', 'SUPERVISOR'] as UserRole[],
+  VIEW_POS_REPORTS: ['OWNER', 'ADMIN', 'SUPERVISOR'] as UserRole[],
 } as const;

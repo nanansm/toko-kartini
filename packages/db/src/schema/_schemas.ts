@@ -4,8 +4,8 @@ import { pgSchema } from 'drizzle-orm/pg-core';
 export const inventorySchema = pgSchema('inventory');
 export const authSchema = pgSchema('auth');
 export const auditSchema = pgSchema('audit');
+export const posSchema = pgSchema('pos');
 
 // Future:
-// export const posSchema = pgSchema('pos');
 // export const accountingSchema = pgSchema('accounting');
 // export const b2bSchema = pgSchema('b2b');
