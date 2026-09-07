@@ -68,6 +68,22 @@ export async function ambilKatalogRingkas(): Promise<BungkusRingkas | null> {
   return env.KATALOG.get<BungkusRingkas>('katalog:cari', 'json');
 }
 
+// Satu bacaan `katalog:cari` (181 KB) untuk banyak id sekaligus — bukan satu
+// bacaan per id, supaya CPU tidak terbakar mengulang data yang sama.
+export async function petaProdukRingkas(ids: readonly string[]): Promise<Map<string, ProdukRingkas>> {
+  const katalog = await ambilKatalogRingkas();
+  const peta = new Map<string, ProdukRingkas>();
+  if (!katalog) return peta;
+
+  const dicari = new Set(ids);
+  for (const produk of katalog.produk) {
+    if (dicari.has(produk.id)) {
+      peta.set(produk.id, produk);
+    }
+  }
+  return peta;
+}
+
 // Menyaring `katalog:cari`, yang isinya sudah bersih dari barang pincang —
 // jangan pernah digabung dengan katalog:pincang, layar pencatatan tidak boleh
 // melihatnya.
