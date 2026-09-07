@@ -1,7 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { PwaDaftar } from '@/components/pwa-daftar';
-import { BottomNav } from '@/components/layout/BottomNav';
+import { Sidebar } from '@/components/layout/Sidebar';
+import { Topbar } from '@/components/layout/Topbar';
 import { getCurrentUser } from '@/lib/session';
 
 export const metadata: Metadata = {
@@ -20,8 +21,8 @@ export const viewport: Viewport = {
 };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  // Peran dibaca di sini, bukan di dalam BottomNav: penyaring menu per peran
-  // ada di sisi server, dan komponen navigasinya sendiri berjalan di peramban.
+  // Peran dibaca di sini: penyaring menu per peran ada di sisi server, dan
+  // komponen navigasinya sendiri (Sidebar/Topbar) berjalan di peramban.
   const user = await getCurrentUser();
 
   return (
@@ -40,8 +41,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         {/* Pengirim latar dipasang di akar, bukan di /catat: antrean harus tetap
             terkuras walau staf sudah pindah halaman setelah menyimpan. */}
         <PwaDaftar />
-        {children}
-        {user && <BottomNav peran={user.peran} />}
+        {user ? (
+          <>
+            <Sidebar userRole={user.peran} />
+            <Topbar user={user} />
+            <div className="lg:pl-60">{children}</div>
+          </>
+        ) : (
+          children
+        )}
       </body>
     </html>
   );

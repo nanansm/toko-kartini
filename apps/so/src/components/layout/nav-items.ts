@@ -5,6 +5,8 @@ import {
   Scale,
   Package,
   ShoppingCart,
+  UserCog,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/roles';
@@ -21,11 +23,11 @@ export interface NavItem {
 // 404, dan menu yang mengantar staf ke halaman kosong lebih buruk daripada
 // menu pendek.
 //
-// Dua halaman admin (/admin/pengguna, /admin/data-pincang) sengaja TIDAK di
-// sini walau ada dan bisa diakses: batangnya memakai `flex-1` per butir, jadi
-// di layar 360px delapan butir menyisakan 45px per label dan tulisannya patah.
-// Keduanya sudah punya tautan sendiri di Beranda, yang memang tempatnya —
-// dipakai sesekali oleh dua peran, bukan tiap hari oleh semua staf.
+// Dua halaman admin ikut di sini sejak navigasi pindah ke laci samping. Waktu
+// menunya masih batang bawah keduanya sengaja dikeluarkan: batang itu memakai
+// `flex-1` per butir, jadi di layar 360px delapan butir menyisakan 45px per
+// label dan tulisannya patah. Laci tidak punya batas itu — butirnya menumpuk
+// ke bawah, selebar laci. Penyaring `roles` yang menjaga siapa melihatnya.
 export const NAV_ITEMS: NavItem[] = [
   {
     label: 'Beranda',
@@ -62,5 +64,19 @@ export const NAV_ITEMS: NavItem[] = [
     href: '/pesanan',
     icon: ShoppingCart,
     roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
+  },
+  {
+    label: 'Pengguna',
+    href: '/admin/pengguna',
+    icon: UserCog,
+    // Sama persis dengan PERMISSIONS.KELOLA_PENGGUNA yang dipakai halamannya.
+    // Menu yang lebih longgar dari penjaga halaman = staf diantar ke 403.
+    roles: ['OWNER'],
+  },
+  {
+    label: 'Data Pincang',
+    href: '/admin/data-pincang',
+    icon: AlertTriangle,
+    roles: ['OWNER'],
   },
 ];

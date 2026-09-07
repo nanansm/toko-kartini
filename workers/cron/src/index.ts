@@ -2,6 +2,7 @@ import { readSheet, parsePricelist } from '@kartini/sheets';
 import type { ProdukSheet } from '@kartini/sheets';
 import { hitungSaldo, cadangkanLog } from './saldo';
 import { tutupBulan } from './bulan';
+import { hitungNilai } from './nilai';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -35,12 +36,20 @@ interface ProdukRingkas {
   kategori: string;
   supplier: string | null;
   satuan: { nama: string; pengali: number }[];
+  /** Harga beli per SATUAN POKOK (satuan terkecil), bukan per satuan Grosir.
+   *  Pricelist menyimpan HPP di kolom F untuk satuan teratas; dibagi pengali
+   *  terbesar hasilnya persis kolom P ("HPP" tingkat terkecil) — sudah dicocokkan
+   *  ke empat baris nyata. Saldo disimpan dalam satuan pokok, jadi nilai uang
+   *  cuma benar kalau harganya juga per satuan pokok. `null` kalau Pricelist
+   *  tidak memberi harga; qty-nya lalu dihitung terpisah, bukan dianggap nol. */
+  hpp: number | null;
 }
 
 // Dinaikkan sendiri dari VERSI_BENTUK: bentuk ringkas ini dipakai halaman
 // pesanan supplier untuk mengelompokkan barang, jadi field `supplier` yang
 // baru ditambahkan wajib membuat konsumen lama sadar bentuknya berubah.
-const VERSI_RINGKAS = 2;
+// Naik ke 3 waktu `hpp` ditambahkan untuk nilai uang stok di Beranda.
+const VERSI_RINGKAS = 3;
 
 interface MetaKatalog {
   versi: 1;
@@ -74,6 +83,20 @@ interface Ringkasan {
   kode?: KodeGalat;
 }
 
+/** Harga beli per satuan pokok. Pengali terbesar = satuan Grosir (Isi = 1 di
+ *  Pricelist berarti pengali tertinggi), dan HPP Grosir berlaku untuk satuan
+ *  itu. Pembagi 0 atau tangga satuan kosong menghasilkan `null`, bukan
+ *  Infinity/NaN yang diam-diam merusak seluruh penjumlahan nilai. */
+function hppPokok(p: ProdukSheet): number | null {
+  if (p.hppGrosir === null || !Number.isFinite(p.hppGrosir)) return null;
+  let pengaliTerbesar = 0;
+  for (const s of p.satuan) {
+    if (s.pengali > pengaliTerbesar) pengaliTerbesar = s.pengali;
+  }
+  if (pengaliTerbesar <= 0) return null;
+  return p.hppGrosir / pengaliTerbesar;
+}
+
 function ringkas(produk: ProdukSheet[]): ProdukRingkas[] {
   return produk.map((p) => ({
     id: p.productId,
@@ -81,6 +104,7 @@ function ringkas(produk: ProdukSheet[]): ProdukRingkas[] {
     kategori: p.kategori,
     supplier: p.supplier,
     satuan: p.satuan,
+    hpp: hppPokok(p),
   }));
 }
 
@@ -286,6 +310,13 @@ async function jalankanTugasSaldo(env: Env): Promise<void> {
   }
 
   try {
+    const ringkasan = await hitungNilai(env);
+    console.log('hitungNilai selesai', ringkasan);
+  } catch (err) {
+    console.error('hitungNilai gagal', err);
+  }
+
+  try {
     const hasil = await cadangkanLog(env, sheetId);
     console.log('cadangkanLog selesai', hasil);
   } catch (err) {
@@ -329,6 +360,18 @@ export default {
       }
       try {
         const ringkasan = await hitungSaldo(env, sheetId);
+        return jsonRespons(ringkasan);
+      } catch (err) {
+        const pesan = err instanceof Error ? err.message : String(err);
+        return jsonRespons({ ok: false, pesan }, 500);
+      }
+    }
+
+    // Tanpa sheetId: hitungNilai murni membaca KV. Endpoint ini ada supaya
+    // nilai bisa dipaksa dihitung ulang tanpa menunggu siklus 10 menit.
+    if (url.pathname === '/nilai' && request.method === 'POST') {
+      try {
+        const ringkasan = await hitungNilai(env);
         return jsonRespons(ringkasan);
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
