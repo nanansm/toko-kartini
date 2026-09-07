@@ -1,6 +1,8 @@
 import type { Metadata, Viewport } from 'next';
 import './globals.css';
 import { PwaDaftar } from '@/components/pwa-daftar';
+import { BottomNav } from '@/components/layout/BottomNav';
+import { getCurrentUser } from '@/lib/session';
 
 export const metadata: Metadata = {
   title: 'Gudang Toko Kartini',
@@ -17,7 +19,11 @@ export const viewport: Viewport = {
   initialScale: 1,
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  // Peran dibaca di sini, bukan di dalam BottomNav: penyaring menu per peran
+  // ada di sisi server, dan komponen navigasinya sendiri berjalan di peramban.
+  const user = await getCurrentUser();
+
   return (
     <html lang="id">
       <head>
@@ -35,6 +41,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             terkuras walau staf sudah pindah halaman setelah menyimpan. */}
         <PwaDaftar />
         {children}
+        {user && <BottomNav peran={user.peran} />}
       </body>
     </html>
   );

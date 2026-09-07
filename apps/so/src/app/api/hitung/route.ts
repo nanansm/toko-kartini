@@ -102,7 +102,58 @@ function isBadan(value: unknown): value is Badan {
 }
 
 export async function GET(): Promise<NextResponse> {
-  return NextResponse.json({ ok: false, pesan: 'Metode tidak didukung' }, { status: 405 });
+  const pengguna = await getCurrentUser();
+  if (!pengguna) {
+    return NextResponse.json({ ok: false, pesan: 'Sesi berakhir, masuk lagi.' }, { status: 401 });
+  }
+
+  if (!canAccess(pengguna.peran, PERMISSIONS.MULAI_SO)) {
+    return NextResponse.json({ ok: false, pesan: 'Tidak berwenang menghitung stok' }, { status: 403 });
+  }
+
+  const sheetId = process.env.SHEET_OPS_ID;
+  if (!sheetId) {
+    return NextResponse.json(
+      { ok: false, pesan: 'Sistem belum siap. Hubungi admin.' },
+      { status: 503 }
+    );
+  }
+
+  const semuaSesi = await bacaSesi(sheetId);
+  const sesiBerjalan = semuaSesi.filter(
+    (s) => s.status === 'BERJALAN' && s.user === pengguna.username
+  );
+  let sesi = sesiBerjalan[0];
+  for (const s of sesiBerjalan) {
+    if (!sesi || s.id > sesi.id) sesi = s;
+  }
+
+  if (!sesi) {
+    return NextResponse.json({ ok: true, sesi: null });
+  }
+
+  const env = getCloudflareContext().env;
+  const cuplikan = await env.KATALOG.get<CuplikanSesi>(`sesi:${sesi.id}`, 'json');
+
+  // Cuplikan hilang (TTL 24 jam lewat) bukan error — sesi tetap ada di Sheets,
+  // cuma saldo pembanding yang sudah tidak bisa ditampilkan ulang.
+  if (!cuplikan) {
+    return NextResponse.json({
+      ok: true,
+      sesi: { id: sesi.id, lokasi: sesi.lokasi, waktuMulai: sesi.waktuMulai, waktuSaldo: null },
+      saldo: [],
+      cuplikanHilang: true,
+    });
+  }
+
+  const saldo = Object.entries(cuplikan.qty).map(([productId, qty]) => ({ productId, qty }));
+
+  return NextResponse.json({
+    ok: true,
+    sesi: { id: sesi.id, lokasi: sesi.lokasi, waktuMulai: sesi.waktuMulai, waktuSaldo: cuplikan.waktuSaldo },
+    saldo,
+    cuplikanHilang: false,
+  });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
@@ -364,7 +415,12 @@ async function handleKirim(
     barisPenulis.push({
       // Deterministik dan wajib begini: ini satu-satunya yang mencegah
       // kiriman yang diulang menyesuaikan stok dua kali.
-      clientId: `opname-${badan.sesiId}-${hasil.productId}`,
+      // Waktu mulai sesi ikut masuk kunci, bukan cuma id-nya. Id sesi adalah
+      // `max(id)+1` dari Sesi_SO, jadi menghapus baris di spreadsheet -- yang
+      // memang diizinkan -- membuat id lama terpakai lagi. Tanpa waktu di sini,
+      // penyesuaian stok yang sah dari sesi baru itu ditolak diam-diam sebagai
+      // kiriman kembar, dan tidak ada apa pun di hilir yang menandainya.
+      clientId: `opname-${badan.sesiId}-${sesi.waktuMulai}-${hasil.productId}`,
       jenis: 'OPNAME',
       productId: hasil.productId,
       namaSaatItu: hasil.nama,

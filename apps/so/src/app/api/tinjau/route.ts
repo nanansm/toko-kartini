@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getCloudflareContext } from '@opennextjs/cloudflare';
-import { bacaTinjau, putuskanTinjau } from '@kartini/sheets';
+import { bacaSesi, bacaTinjau, putuskanTinjau } from '@kartini/sheets';
 import { getCurrentUser, canAccess, PERMISSIONS } from '@/lib/session';
 import { deltaMutlak, deltaSelisih, deltaKePenyesuaian } from '@/lib/opname';
 import { bacaLogBulanIni, pergeseranSejak } from '@/lib/log-terkini';
@@ -131,6 +131,12 @@ export async function POST(request: Request): Promise<NextResponse> {
     qtyTerlihatDicatat = qtySistemKini;
   }
 
+  // Sama alasannya dengan clientId di /api/hitung: id baris tinjauan adalah
+  // `max(id)+1` dari Tinjau_SO, jadi baris yang dihapus tangan membuat id lama
+  // terpakai ulang. Waktu mulai sesinya yang membuat kunci ini tetap tunggal.
+  const sesiTinjau = (await bacaSesi(sheetId)).find((s) => s.id === baris.sesiId);
+  const kunciTinjau = `tinjau-${tinjauId}-${baris.sesiId}-${sesiTinjau?.waktuMulai ?? 'tanpa-sesi'}`;
+
   const penyesuaian =
     keputusan === 'BATAL'
       ? null
@@ -150,7 +156,7 @@ export async function POST(request: Request): Promise<NextResponse> {
             {
               // Deterministik dan wajib -- ini satu-satunya yang mencegah
               // keputusan yang terkirim dua kali menyesuaikan stok dua kali.
-              clientId: `tinjau-${tinjauId}`,
+              clientId: kunciTinjau,
               jenis: 'OPNAME',
               productId: penyesuaian.productId,
               namaSaatItu: penyesuaian.nama,

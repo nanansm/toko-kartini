@@ -14,6 +14,14 @@ export function FormMasuk() {
   const [pin, setPin] = React.useState('');
   const [error, setError] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(false);
+  // Sebelum React terhidrasi, `onSubmit` belum terpasang dan tombol Masuk
+  // menjalankan pengiriman formulir bawaan peramban -- GET, yang menempelkan
+  // username DAN PIN ke URL, riwayat peramban, dan log proksi mana pun di
+  // jalurnya. HP staf di gudang justru yang paling lama menunggu hidrasi.
+  const [siap, setSiap] = React.useState(false);
+  React.useEffect(() => {
+    setSiap(true);
+  }, []);
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -51,7 +59,7 @@ export function FormMasuk() {
   return (
     <Card>
       <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form method="post" onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="username">Username</Label>
             <Input
@@ -91,7 +99,7 @@ export function FormMasuk() {
             </Alert>
           )}
 
-          <Button type="submit" className="w-full min-h-12" disabled={loading}>
+          <Button type="submit" className="w-full min-h-12" disabled={loading || !siap}>
             {loading ? 'Memproses...' : 'Masuk'}
           </Button>
         </form>
