@@ -1,0 +1,19 @@
+{
+  "name": "Gudang Toko Kartini",
+  "short_name": "Kartini",
+  "start_url": "/catat",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#0f7a3e",
+  "lang": "id",
+  "icons": [
+    {
+      "src": "/ikon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

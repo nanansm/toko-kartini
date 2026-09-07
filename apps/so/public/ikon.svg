@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Gudang Toko Kartini">
+  <!-- Latar penuh, bukan transparan: ikon maskable dipotong jadi lingkaran atau
+       kotak membulat oleh peluncur Android, dan latar transparan menghasilkan
+       potongan bergerigi. -->
+  <rect width="512" height="512" fill="#0f7a3e"/>
+  <!-- Gambarnya ditahan di 80% tengah (kotak 102..410) — di luar itu bisa
+       terpotong mask peluncur. -->
+  <g fill="none" stroke="#ffffff" stroke-width="26" stroke-linejoin="round" stroke-linecap="round">
+    <!-- Peti dilihat dari depan: dua daun tutup di atas, badan di bawah. -->
+    <path d="M136 200h240v168a16 16 0 0 1-16 16H152a16 16 0 0 1-16-16z"/>
+    <path d="M120 136h272v64H120z"/>
+    <path d="M232 264h48"/>
+  </g>
+</svg>

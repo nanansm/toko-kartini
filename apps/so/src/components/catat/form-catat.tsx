@@ -18,11 +18,14 @@ import { type KodeLokasi, LABEL_LOKASI } from '@/lib/lokasi';
 import {
   type JenisMutasi,
   type SebabRusak,
-  type SatuanTingkat,
+  type MasukanMutasi,
   LABEL_JENIS,
   LABEL_SEBAB,
   ARAH_SAH,
 } from '@/lib/mutasi';
+import { cariLokal, katalogSiap, segarkanKatalogLokal, type ProdukRingkas } from '@/lib/katalog-lokal';
+import { ambilSemua, tambahAntre, type ItemAntre, type StatusAntre } from '@/lib/antrean';
+import { type KeadaanKirim, langgananKirim, mulaiPengirim, picuKirim } from '@/lib/pengirim';
 
 // Opname (hitung stok) punya jalur sendiri yang belum dibangun — jangan ditampilkan di sini.
 type TabJenis = Exclude<JenisMutasi, 'OPNAME'>;
@@ -32,50 +35,16 @@ function isTabJenis(nilai: string): nilai is TabJenis {
   return (TAB_JENIS as readonly string[]).includes(nilai);
 }
 
-interface ProdukHasil {
-  id: string;
-  nama: string;
-  kategori: string;
-  satuan: SatuanTingkat[];
-}
-
-interface ResponCari {
-  ok: boolean;
-  produk?: ProdukHasil[];
-}
-
-interface ResponCatat {
-  ok: boolean;
-  diterima?: string[];
-  duplikat?: string[];
-  tertunda?: string[];
-  ditolak?: { clientId: string; pesan: string }[];
-  pesan?: string;
-}
-
-type StatusBaris = 'tersimpan' | 'menunggu' | 'gagal';
-
-interface BarisTercatat {
-  clientId: string;
-  namaBarang: string;
-  qtyInput: number;
-  satuanInput: string;
-  dari: KodeLokasi;
-  ke: KodeLokasi;
-  status: StatusBaris;
-  pesan: string | null;
-}
-
-const LABEL_STATUS: Record<StatusBaris, string> = {
-  tersimpan: 'Tersimpan',
+const LABEL_STATUS_ANTRE: Record<StatusAntre, string> = {
+  terkirim: 'Tersimpan',
   menunggu: 'Menunggu',
   gagal: 'Gagal',
 };
 
 // Badge bawaan cuma punya default/secondary/destructive/outline — tak ada hijau/kuning,
 // jadi warna status ditimpa lewat className di atas variant "outline".
-const KELAS_STATUS: Record<StatusBaris, string> = {
-  tersimpan: 'border-transparent bg-green-600 text-white',
+const KELAS_STATUS_ANTRE: Record<StatusAntre, string> = {
+  terkirim: 'border-transparent bg-green-600 text-white',
   menunggu: 'border-transparent bg-yellow-500 text-black',
   gagal: 'border-transparent bg-destructive text-white',
 };
@@ -83,11 +52,12 @@ const KELAS_STATUS: Record<StatusBaris, string> = {
 export function FormCatat(): React.JSX.Element {
   const [jenis, setJenis] = React.useState<TabJenis>('DATANG');
 
+  const [katalogAda, setKatalogAda] = React.useState(false);
   const [kataKunci, setKataKunci] = React.useState('');
-  const [hasilCari, setHasilCari] = React.useState<ProdukHasil[]>([]);
+  const [hasilCari, setHasilCari] = React.useState<ProdukRingkas[]>([]);
   const [mencari, setMencari] = React.useState(false);
   const [errorCari, setErrorCari] = React.useState<string | null>(null);
-  const [produkTerpilih, setProdukTerpilih] = React.useState<ProdukHasil | null>(null);
+  const [produkTerpilih, setProdukTerpilih] = React.useState<ProdukRingkas | null>(null);
 
   const arahSah = ARAH_SAH[jenis];
   const asalLocked = arahSah.dari.length === 1;
@@ -105,12 +75,50 @@ export function FormCatat(): React.JSX.Element {
   const [sebab, setSebab] = React.useState<SebabRusak | ''>('');
   const [catatan, setCatatan] = React.useState('');
 
-  const [mengirim, setMengirim] = React.useState(false);
-  const [tercatat, setTercatat] = React.useState<BarisTercatat[]>([]);
+  const [errorSimpan, setErrorSimpan] = React.useState<string | null>(null);
+  const [daftar, setDaftar] = React.useState<ItemAntre[]>([]);
+  const [keadaan, setKeadaan] = React.useState<KeadaanKirim>({
+    daring: true,
+    menunggu: 0,
+    sibuk: false,
+    sesiHabis: false,
+    terakhirGalat: null,
+  });
 
-  // clientId dibuat SEKALI per percobaan simpan dan dipakai ulang saat retry —
-  // kalau dibuat ulang, baris kembar mendarat di spreadsheet.
-  const pendingClientIdRef = React.useRef<string | null>(null);
+  const muatUlangDaftar = React.useCallback(async () => {
+    setDaftar(await ambilSemua());
+  }, []);
+
+  // Pengirim jalan di latar belakang selama formulir dipasang — bukan cuma
+  // saat tombol Simpan ditekan, supaya antrean lama juga ikut tercicil.
+  React.useEffect(() => {
+    const berhentiPengirim = mulaiPengirim();
+    const berhentiLanggan = langgananKirim((k) => {
+      setKeadaan(k);
+      void muatUlangDaftar();
+    });
+    void muatUlangDaftar();
+    return () => {
+      berhentiLanggan();
+      berhentiPengirim();
+    };
+  }, [muatUlangDaftar]);
+
+  // Katalog disegarkan di latar belakang — formulir tidak menunggunya supaya
+  // tetap bisa dipakai walau sinyal Gudang Ciherang lagi jelek.
+  React.useEffect(() => {
+    let dibatalkan = false;
+    void katalogSiap().then((siap) => {
+      if (!dibatalkan) setKatalogAda(siap);
+    });
+    void segarkanKatalogLokal().then(() => {
+      if (dibatalkan) return;
+      void katalogSiap().then((siap) => setKatalogAda(siap));
+    });
+    return () => {
+      dibatalkan = true;
+    };
+  }, []);
 
   const opsiTujuan =
     jenis === 'PINDAH' ? arahSah.ke.filter((k) => k !== dari) : arahSah.ke;
@@ -129,7 +137,6 @@ export function FormCatat(): React.JSX.Element {
     setCatatan('');
     setDari(arahBaru.dari.length === 1 ? (arahBaru.dari[0] ?? null) : null);
     setKe(arahBaru.ke.length === 1 ? (arahBaru.ke[0] ?? null) : null);
-    pendingClientIdRef.current = null;
   }
 
   React.useEffect(() => {
@@ -141,39 +148,24 @@ export function FormCatat(): React.JSX.Element {
       setMencari(false);
       return;
     }
-    const controller = new AbortController();
+    if (!katalogAda) {
+      setErrorCari('Barang belum bisa dicari. Buka aplikasi ini sekali saat ada sinyal.');
+      setHasilCari([]);
+      return;
+    }
     const timer = setTimeout(() => {
       setMencari(true);
-      fetch(`/api/cari?q=${encodeURIComponent(kata)}`, { signal: controller.signal })
-        .then(async (res) => {
-          if (!res.ok) {
-            setErrorCari('Gagal mencari barang.');
-            setHasilCari([]);
-            return;
-          }
-          const data = (await res.json()) as ResponCari;
-          if (!data.ok) {
-            setErrorCari('Gagal mencari barang.');
-            setHasilCari([]);
-            return;
-          }
+      cariLokal(kata, 20)
+        .then((hasil) => {
           setErrorCari(null);
-          setHasilCari(data.produk ?? []);
-        })
-        .catch((err: unknown) => {
-          if (err instanceof DOMException && err.name === 'AbortError') return; // dibatalkan karena ketikan baru
-          setErrorCari('Gagal mencari barang.');
-          setHasilCari([]);
+          setHasilCari(hasil);
         })
         .finally(() => setMencari(false));
     }, 300);
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [kataKunci, produkTerpilih]);
+    return () => clearTimeout(timer);
+  }, [kataKunci, produkTerpilih, katalogAda]);
 
-  function pilihProduk(p: ProdukHasil): void {
+  function pilihProduk(p: ProdukRingkas): void {
     setProdukTerpilih(p);
     setHasilCari([]);
     const urut = [...p.satuan].sort((a, b) => b.pengali - a.pengali);
@@ -193,7 +185,6 @@ export function FormCatat(): React.JSX.Element {
 
   const jumlahSah = Number.isFinite(jumlah) && jumlah >= 1;
   const bisaSimpan =
-    !mengirim &&
     produkTerpilih !== null &&
     dari !== null &&
     ke !== null &&
@@ -204,112 +195,59 @@ export function FormCatat(): React.JSX.Element {
 
   async function simpan(): Promise<void> {
     if (!bisaSimpan || !produkTerpilih || dari === null || ke === null) return;
-    setMengirim(true);
 
-    const clientId = pendingClientIdRef.current ?? crypto.randomUUID();
-    pendingClientIdRef.current = clientId;
-
-    // Nilai dikunci ke const: penyempitan tipe dari penjaga di atas tidak ikut
-    // masuk ke dalam closure `upsert`, dan React bisa merender ulang di tengah
-    // pengiriman — baris yang dilaporkan harus yang dikirim, bukan yang terbaru
-    // di layar.
-    const produk = produkTerpilih;
-    const asal = dari;
-    const tujuan = ke;
-
-    const baris = {
+    // clientId baru tiap simpan — pengiriman ulang & dedup jadi urusan
+    // antrean/pengirim, bukan komponen ini.
+    const clientId = crypto.randomUUID();
+    const muatan: MasukanMutasi = {
       clientId,
       jenis,
-      productId: produk.id,
-      namaSaatItu: produk.nama,
+      productId: produkTerpilih.id,
+      namaSaatItu: produkTerpilih.nama,
       satuanInput: satuanTerpilih,
       qtyInput: jumlah,
-      dari: asal,
-      ke: tujuan,
+      dari,
+      ke,
       sebab: jenis === 'RUSAK' ? sebab : null,
       catatan: catatan.trim() === '' ? null : catatan.trim(),
     };
 
-    function upsert(status: StatusBaris, pesan: string | null): void {
-      setTercatat((prev) => [
-        {
-          clientId,
-          namaBarang: produk.nama,
-          qtyInput: jumlah,
-          satuanInput: satuanTerpilih,
-          dari: asal,
-          ke: tujuan,
-          status,
-          pesan,
-        },
-        ...prev.filter((b) => b.clientId !== clientId),
-      ]);
+    const item = await tambahAntre(muatan);
+    if (!item) {
+      // IndexedDB tak tersedia — jangan pura-pura tersimpan.
+      setErrorSimpan('Gagal menyimpan di HP ini. Coba lagi.');
+      return;
     }
 
-    try {
-      const res = await fetch('/api/catat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ baris: [baris] }),
-      });
-
-      if (res.status === 401) {
-        upsert('gagal', 'Sesi berakhir, masuk lagi.');
-        setMengirim(false);
-        return;
-      }
-      if (res.status === 502 || res.status === 503) {
-        upsert('menunggu', null);
-        setMengirim(false);
-        return;
-      }
-
-      const contentType = res.headers.get('content-type') ?? '';
-      if (!contentType.includes('application/json')) {
-        upsert('gagal', 'Server memberi jawaban tak terduga.');
-        setMengirim(false);
-        return;
-      }
-
-      let data: ResponCatat;
-      try {
-        data = (await res.json()) as ResponCatat;
-      } catch {
-        upsert('gagal', 'Gagal membaca jawaban server.');
-        setMengirim(false);
-        return;
-      }
-
-      if (!data.ok) {
-        upsert('gagal', data.pesan ?? 'Ditolak server.');
-        setMengirim(false);
-        return;
-      }
-
-      const ditolak = data.ditolak?.find((d) => d.clientId === clientId);
-      if (ditolak) {
-        upsert('gagal', ditolak.pesan);
-      } else if (data.tertunda?.includes(clientId)) {
-        upsert('menunggu', null);
-      } else if (data.diterima?.includes(clientId) || data.duplikat?.includes(clientId)) {
-        upsert('tersimpan', null);
-        pendingClientIdRef.current = null;
-        setJumlah(1);
-        setSebab('');
-        setCatatan('');
-      } else {
-        upsert('gagal', 'Status tidak diketahui dari server.');
-      }
-    } catch {
-      // Jaringan putus dianggap sementara, sama seperti 502/503 — boleh dicoba lagi.
-      upsert('menunggu', null);
-    } finally {
-      setMengirim(false);
-    }
+    setErrorSimpan(null);
+    setJumlah(1);
+    setSebab('');
+    setCatatan('');
+    await muatUlangDaftar();
+    picuKirim();
   }
 
   return (
     <div className="flex flex-col gap-4 pb-4">
+      {(keadaan.daring === false || keadaan.menunggu > 0) && (
+        <div className="flex flex-wrap items-center gap-2 text-sm">
+          {keadaan.daring === false && (
+            <Badge variant="secondary">Luring — catatan disimpan di HP</Badge>
+          )}
+          {keadaan.menunggu > 0 && (
+            <span className="text-xs text-muted-foreground">{keadaan.menunggu} menunggu terkirim</span>
+          )}
+        </div>
+      )}
+      {keadaan.sesiHabis && (
+        <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
+          Sesi berakhir. Masuk lagi supaya catatan terkirim.{' '}
+          <a href="/masuk" className="font-semibold underline">
+            Masuk
+          </a>
+        </div>
+      )}
+
       <Tabs value={jenis} onValueChange={gantiTab}>
         <TabsList className="grid w-full grid-cols-4">
           {TAB_JENIS.map((t) => (
@@ -493,27 +431,31 @@ export function FormCatat(): React.JSX.Element {
         <Input value={catatan} onChange={(e) => setCatatan(e.target.value)} />
       </div>
 
+      {errorSimpan && <div className="text-sm text-destructive">{errorSimpan}</div>}
+
       <div className="sticky bottom-0 -mx-4 border-t border-border bg-background p-4">
         <Button className="h-12 w-full text-base" disabled={!bisaSimpan} onClick={simpan}>
-          {mengirim ? 'Menyimpan...' : 'Simpan'}
+          Simpan
         </Button>
       </div>
 
-      {tercatat.length > 0 && (
+      {daftar.length > 0 && (
         <div className="space-y-2">
           <Label>Tercatat sesi ini</Label>
           <div className="flex flex-col divide-y divide-border rounded-md border border-border">
-            {tercatat.map((b) => (
-              <div key={b.clientId} className="flex items-center justify-between gap-2 p-3">
+            {daftar.slice(0, 30).map((it) => (
+              <div key={it.clientId} className="flex items-center justify-between gap-2 p-3">
                 <div>
-                  <div className="font-semibold">{b.namaBarang}</div>
+                  <div className="font-semibold">{it.muatan.namaSaatItu}</div>
                   <div className="text-xs text-muted-foreground">
-                    {b.qtyInput} {b.satuanInput} · {LABEL_LOKASI[b.dari]} → {LABEL_LOKASI[b.ke]}
+                    {it.muatan.qtyInput} {it.muatan.satuanInput} ·{' '}
+                    {it.muatan.dari ? LABEL_LOKASI[it.muatan.dari as KodeLokasi] : '-'} →{' '}
+                    {it.muatan.ke ? LABEL_LOKASI[it.muatan.ke as KodeLokasi] : '-'}
                   </div>
-                  {b.pesan && <div className="text-xs text-destructive">{b.pesan}</div>}
+                  {it.pesan && <div className="text-xs text-destructive">{it.pesan}</div>}
                 </div>
-                <Badge variant="outline" className={KELAS_STATUS[b.status]}>
-                  {LABEL_STATUS[b.status]}
+                <Badge variant="outline" className={KELAS_STATUS_ANTRE[it.status]}>
+                  {LABEL_STATUS_ANTRE[it.status]}
                 </Badge>
               </div>
             ))}
