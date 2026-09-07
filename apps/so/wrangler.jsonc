@@ -6,8 +6,8 @@
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "binding": "ASSETS", "directory": ".open-next/assets" },
   "kv_namespaces": [
-    { "binding": "KATALOG", "id": "GANTI_SETELAH_DIBUAT" },
-    { "binding": "SESI", "id": "GANTI_SETELAH_DIBUAT" }
+    { "binding": "KATALOG", "id": "fb66d0883e8c4545928f9411db197aa1" },
+    { "binding": "SESI", "id": "9008e3eb5fdd4524aea491e667cdaf53" }
   ],
   "durable_objects": {
     "bindings": [{ "name": "PENULIS", "class_name": "Penulis" }]
