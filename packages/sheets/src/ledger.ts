@@ -194,6 +194,28 @@ export async function bacaSaldoAwal(sheetId: string, bulan: string): Promise<Sal
   return hasil;
 }
 
+/** Bulan mana saja yang sudah punya baris di Saldo_Awal. */
+export async function bulanSaldoAwal(sheetId: string): Promise<Set<string>> {
+  const rows = await readSheet(sheetId, SALDO_AWAL_RANGE);
+  const hasil = new Set<string>();
+  for (const row of rows) {
+    const bulan = (row[0] ?? '').trim();
+    if (bulan !== '') hasil.add(bulan);
+  }
+  return hasil;
+}
+
+export async function tambahSaldoAwal(
+  sheetId: string,
+  bulan: string,
+  baris: readonly { productId: string; lokasi: string; qty: number }[]
+): Promise<void> {
+  if (baris.length === 0) return;
+  // Satu appendRows untuk semua baris — kuota tulis Sheets 60/menit per toko.
+  const rows = baris.map((b) => [bulan, b.productId, b.lokasi, b.qty]);
+  await appendRows(sheetId, `${SALDO_AWAL_TAB}!A:D`, rows);
+}
+
 export async function catatErrorSheet(
   sheetId: string,
   pesan: string,

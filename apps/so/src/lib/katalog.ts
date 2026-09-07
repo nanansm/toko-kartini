@@ -31,6 +31,9 @@ export interface ProdukRingkas {
   id: string;
   nama: string;
   kategori: string;
+  // Ditulis cron sejak katalog:cari versi 2, dipakai mengelompokkan daftar
+  // pesanan. Boleh null: Pricelist punya baris tanpa supplier.
+  supplier: string | null;
   satuan: { nama: string; pengali: number }[];
 }
 

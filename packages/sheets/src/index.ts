@@ -7,6 +7,7 @@ export {
   updateRange,
   daftarTab,
   duplikatTab,
+  buatTab,
 } from './client';
 export type { TabSheet } from './client';
 export { angkaID, parseProdukRow, parsePricelist } from './parsers';
@@ -28,6 +29,8 @@ export {
   tambahBarisLog,
   ringkasLog,
   bacaSaldoAwal,
+  bulanSaldoAwal,
+  tambahSaldoAwal,
   catatErrorSheet,
 } from './ledger';
 export type { BarisLog, SaldoAwal } from './ledger';
@@ -42,3 +45,5 @@ export {
   putuskanTinjau,
 } from './sesi';
 export type { BarisSesi, BarisTinjau } from './sesi';
+export { KOLOM_MINIMUM, bacaMinimum } from './minimum';
+export type { BarisMinimum } from './minimum';

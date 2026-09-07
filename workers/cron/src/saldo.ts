@@ -71,23 +71,27 @@ export interface RingkasanSaldo {
   takBerubah?: boolean;
 }
 
-export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanSaldo> {
-  const sekarang = new Date();
-  const bulan = bulanSekarang(sekarang);
-  const tab = namaTabLog(sekarang);
-  const waktu = sekarang.toISOString();
+interface HasilLipat {
+  peta: Map<string, number>;
+  kejanggalan: string[];
+  idTerakhir: number;
+}
 
-  const [saldoAwal, log] = await Promise.all([
-    bacaSaldoAwal(sheetId, bulan),
-    bacaLog(sheetId, tab),
-  ]);
-
+/** Melipat Saldo_Awal + baris Log jadi saldo per produk x lokasi.
+ *  Murni, tanpa I/O. Dipakai dua tempat -- penghitungan saldo berjalan dan
+ *  penutupan bulan -- dan keduanya WAJIB memakai aturan yang sama persis:
+ *  kalau salah satunya menyimpang, saldo pembuka bulan baru tidak akan cocok
+ *  dengan saldo penutup bulan lalu dan tidak ada yang memberi tahu. */
+export function lipatSaldo(
+  saldoAwal: readonly { productId: string; lokasi: string; qty: number }[],
+  log: readonly BarisLogRingkas[]
+): HasilLipat {
   const peta = new Map<string, number>();
   for (const baris of saldoAwal) {
     peta.set(`${baris.productId}|${baris.lokasi}`, baris.qty);
   }
 
-  // Baris sheet bisa disisipkan/diedit tangan — urutan baris tidak boleh
+  // Baris sheet bisa disisipkan/diedit tangan -- urutan baris tidak boleh
   // dipercaya sebagai urutan kejadian, wajib diurutkan lewat id sendiri.
   const logUrut = [...log].sort((a, b) => a.id - b.id);
 
@@ -123,7 +127,7 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
     }
     const qtyPokok = baris.qtyPokok;
 
-    // Lokasi maya tidak pernah punya saldo — barang datang dari luar sistem,
+    // Lokasi maya tidak pernah punya saldo -- barang datang dari luar sistem,
     // barang rusak keluar satu arah. Selain itu, saldo boleh minus: minus
     // berarti ada perpindahan yang belum tercatat dan itu wajib kelihatan.
     //
@@ -140,6 +144,36 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
     }
   }
 
+  // id terbesar yang ikut terjumlah. logUrut sudah diurutkan menaik.
+  const idTerakhir = logUrut.length === 0 ? 0 : (logUrut[logUrut.length - 1]?.id ?? 0);
+
+  return { peta, kejanggalan, idTerakhir };
+}
+
+/** Bentuk minimal baris Log yang dibutuhkan lipatSaldo. */
+export interface BarisLogRingkas {
+  id: number;
+  clientId: string;
+  productId: string;
+  qtyPokok: number | null;
+  dari: string | null;
+  ke: string | null;
+}
+
+export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanSaldo> {
+  const sekarang = new Date();
+  const bulan = bulanSekarang(sekarang);
+  const tab = namaTabLog(sekarang);
+  const waktu = sekarang.toISOString();
+
+  const [saldoAwal, log] = await Promise.all([
+    bacaSaldoAwal(sheetId, bulan),
+    bacaLog(sheetId, tab),
+  ]);
+
+  const { peta, kejanggalan, idTerakhir } = lipatSaldo(saldoAwal, log);
+  const jumlahBarisLog = log.length;
+
   // Kejanggalan yang sama dicatat sekali, bukan tiap siklus. Cron jalan 144x
   // sehari; tanpa gerbang ini satu baris janggal yang belum dibetulkan
   // menghasilkan 144 baris di tab Error setiap hari sampai orangnya menyerah
@@ -154,9 +188,6 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
       await env.KATALOG.delete('saldo:kejanggalan');
     }
   }
-
-  // id terbesar yang ikut terjumlah. logUrut sudah diurutkan menaik.
-  const idTerakhir = logUrut.length === 0 ? 0 : (logUrut[logUrut.length - 1]?.id ?? 0);
 
   const saldo: BarisSaldo[] = [];
   for (const [kunci, qty] of peta) {
@@ -174,7 +205,7 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
     return {
       waktu,
       bulan,
-      jumlahBaris: logUrut.length,
+      jumlahBaris: jumlahBarisLog,
       jumlahSaldo: saldo.length,
       kejanggalan: kejanggalan.length,
       takBerubah: true,
@@ -208,7 +239,7 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
   return {
     waktu,
     bulan,
-    jumlahBaris: logUrut.length,
+    jumlahBaris: jumlahBarisLog,
     jumlahSaldo: saldo.length,
     kejanggalan: kejanggalan.length,
   };

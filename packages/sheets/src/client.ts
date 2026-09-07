@@ -342,6 +342,45 @@ export async function duplikatTab(
   });
 }
 
+/**
+ * Bungkus judul tab dengan kutip tunggal kalau mengandung karakter selain
+ * huruf/angka/garis bawah, supaya aman dipakai di rentang A1 (mis. ada spasi
+ * atau tanda baca). Kutip tunggal di dalam judul di-escape ganda sesuai
+ * aturan rentang Sheets.
+ */
+function bungkusJudulRentang(judul: string): string {
+  if (/^[A-Za-z0-9_]+$/.test(judul)) {
+    return judul;
+  }
+  return `'${judul.replace(/'/g, "''")}'`;
+}
+
+/**
+ * Membuat tab baru lewat `addSheet`, lalu menulis baris header lewat
+ * `updateRange`. Kalau tab sudah ada, Google membalas 400 dan galat itu
+ * dilempar apa adanya — pemanggil yang wajib memeriksa keberadaan tab dulu.
+ */
+export async function buatTab(
+  sheetId: string,
+  judul: string,
+  header: readonly string[]
+): Promise<void> {
+  const url = `${SHEETS_API_BASE}/${sheetId}:batchUpdate`;
+  await apiRequest(SCOPE_READWRITE, "POST", url, {
+    requests: [
+      {
+        addSheet: {
+          properties: { title: judul },
+        },
+      },
+    ],
+  });
+  if (header.length === 0) {
+    return;
+  }
+  await updateRange(sheetId, `${bungkusJudulRentang(judul)}!A1`, [[...header]]);
+}
+
 export async function appendRows(
   sheetId: string,
   range: string,

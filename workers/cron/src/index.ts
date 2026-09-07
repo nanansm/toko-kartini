@@ -1,6 +1,7 @@
 import { readSheet, parsePricelist } from '@kartini/sheets';
 import type { ProdukSheet } from '@kartini/sheets';
 import { hitungSaldo, cadangkanLog } from './saldo';
+import { tutupBulan } from './bulan';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -93,7 +94,13 @@ function hitungSidik(produk: ProdukSheet[], pincang: ProdukSheet[]): string {
   for (let i = 0; i < str.length; i++) {
     hash = (hash * 33) ^ str.charCodeAt(i);
   }
-  return `b${VERSI_BENTUK}-${str.length}-${(hash >>> 0).toString(36)}`;
+  // VERSI_RINGKAS ikut masuk, bukan cuma VERSI_BENTUK. `katalog:cari` ditulis
+  // dari `ringkas()`, yang punya bentuknya sendiri: waktu `supplier` ditambahkan
+  // ke sana, isi Pricelist tidak berubah sedikit pun, sidiknya sama, `takBerubah`
+  // memotong penulisan -- dan KV menyimpan bentuk lama SELAMANYA tanpa satu pun
+  // galat. Halaman Pesanan Supplier kelihatan jalan, cuma semua barang jatuh ke
+  // "Tanpa supplier". Sudah terjadi sekali.
+  return `b${VERSI_BENTUK}r${VERSI_RINGKAS}-${str.length}-${(hash >>> 0).toString(36)}`;
 }
 
 function periksaHeader(baris: string[] | undefined): string | null {
@@ -265,6 +272,13 @@ async function jalankanTugasSaldo(env: Env): Promise<void> {
   }
 
   try {
+    const hasil = await tutupBulan(sheetId);
+    console.log('tutupBulan selesai', hasil);
+  } catch (err) {
+    console.error('tutupBulan gagal', err);
+  }
+
+  try {
     const ringkasan = await hitungSaldo(env, sheetId);
     console.log('hitungSaldo selesai', ringkasan);
   } catch (err) {
@@ -315,6 +329,20 @@ export default {
       }
       try {
         const ringkasan = await hitungSaldo(env, sheetId);
+        return jsonRespons(ringkasan);
+      } catch (err) {
+        const pesan = err instanceof Error ? err.message : String(err);
+        return jsonRespons({ ok: false, pesan }, 500);
+      }
+    }
+
+    if (url.pathname === '/tutup-bulan' && request.method === 'POST') {
+      const sheetId = process.env.SHEET_OPS_ID;
+      if (!sheetId) {
+        return jsonRespons({ ok: false, pesan: 'SHEET_OPS_ID belum dipasang' }, 500);
+      }
+      try {
+        const ringkasan = await tutupBulan(sheetId);
         return jsonRespons(ringkasan);
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
