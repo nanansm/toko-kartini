@@ -67,8 +67,8 @@ function base64UrlEncode(input: ArrayBuffer | string): string {
       ? new TextEncoder().encode(input)
       : new Uint8Array(input);
   let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  for (const b of bytes) {
+    binary += String.fromCharCode(b);
   }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }

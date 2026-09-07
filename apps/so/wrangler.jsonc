@@ -10,8 +10,14 @@
     { "binding": "SESI", "id": "9008e3eb5fdd4524aea491e667cdaf53" }
   ],
   "durable_objects": {
-    "bindings": [{ "name": "PENULIS", "class_name": "Penulis" }]
+    "bindings": [
+      { "name": "PENULIS", "class_name": "Penulis" },
+      { "name": "GERBANG", "class_name": "Gerbang" }
+    ]
   },
-  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Penulis"] }],
+  "migrations": [
+    { "tag": "v1", "new_sqlite_classes": ["Penulis"] },
+    { "tag": "v2", "new_sqlite_classes": ["Gerbang"] }
+  ],
   "observability": { "enabled": true }
 }
