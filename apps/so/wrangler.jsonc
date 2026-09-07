@@ -1,5 +1,9 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
+  // Akun Simaung.coorporate. Dipatok di sini, bukan diserahkan ke
+  // CLOUDFLARE_ACCOUNT_ID, karena env di mesin ini menunjuk akun lain dan
+  // deploy tanpa patokan akan mendarat di akun yang salah.
+  "account_id": "0fdd5878683b65122760dbd0bab5256e",
   "name": "kartini-gudang",
   "main": "worker-entry.js",
   "compatibility_date": "2026-09-07",

@@ -1,0 +1,19 @@
+{
+  "name": "@kartini/cron",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "type-check": "tsc --noEmit",
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "cf-typegen": "wrangler types"
+  },
+  "dependencies": {
+    "@kartini/sheets": "workspace:*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2",
+    "wrangler": "^4.129.0"
+  }
+}
