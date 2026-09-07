@@ -6,6 +6,16 @@ export const SCOPE_READONLY = "https://www.googleapis.com/auth/spreadsheets.read
 export const SCOPE_READWRITE = "https://www.googleapis.com/auth/spreadsheets";
 
 const RETRY_STATUSES = new Set([429, 500, 502, 503, 504]);
+
+// Khusus penulisan yang menambah baris. 5xx itu AMBIGU: Google bisa saja sudah
+// menyimpan barisnya lalu jawabannya yang hilang di jalan, dan pengulangan
+// mengirim badan yang sama persis — id dan client_id yang sama — sehingga
+// seluruh batch mendarat dua kali. Dedup client_id di Durable Object tidak
+// menolongnya karena pengulangan itu terjadi di dalam satu panggilan.
+// 429 aman diulang: permintaan ditolak sebelum apa pun ditulis.
+// Kegagalan selain 429 diserahkan ke alarm DO, yang membaca ulang client_id
+// dari Sheets dulu sebelum mengirim lagi.
+const RETRY_STATUSES_TAMBAH = new Set([429]);
 const MAX_RETRIES = 4;
 const BASE_DELAY_MS = 500;
 
@@ -186,11 +196,15 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchWithRetry(url: string, init: RequestInit): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  statusUlang: Set<number> = RETRY_STATUSES
+): Promise<Response> {
   let attempt = 0;
   for (;;) {
     const res = await fetch(url, init);
-    if (res.ok || !RETRY_STATUSES.has(res.status) || attempt >= MAX_RETRIES - 1) {
+    if (res.ok || !statusUlang.has(res.status) || attempt >= MAX_RETRIES - 1) {
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
         const err = new Error(
@@ -212,7 +226,8 @@ async function apiRequest<T>(
   scope: string,
   method: string,
   url: string,
-  body?: unknown
+  body?: unknown,
+  statusUlang: Set<number> = RETRY_STATUSES
 ): Promise<T> {
   const { accessToken, cacheKey } = await getAccessToken(scope);
   const init: RequestInit = {
@@ -226,19 +241,23 @@ async function apiRequest<T>(
 
   let res: Response;
   try {
-    res = await fetchWithRetry(url, init);
+    res = await fetchWithRetry(url, init, statusUlang);
   } catch (err) {
     const status = (err as { status?: number }).status;
     if (status === 401 || status === 403) {
       evictCachedToken(cacheKey);
       const retried = await getAccessToken(scope);
-      res = await fetchWithRetry(url, {
-        ...init,
-        headers: {
-          ...init.headers,
-          Authorization: `Bearer ${retried.accessToken}`,
+      res = await fetchWithRetry(
+        url,
+        {
+          ...init,
+          headers: {
+            ...init.headers,
+            Authorization: `Bearer ${retried.accessToken}`,
+          },
         },
-      });
+        statusUlang
+      );
     } else {
       throw err;
     }
@@ -331,7 +350,7 @@ export async function appendRows(
   const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(
     range
   )}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
-  await apiRequest(SCOPE_READWRITE, "POST", url, { values: rows });
+  await apiRequest(SCOPE_READWRITE, "POST", url, { values: rows }, RETRY_STATUSES_TAMBAH);
 }
 
 export async function updateRange(

@@ -106,6 +106,16 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
       kejanggalan.push(`baris ${baris.id} ke="${baris.ke}" bukan kode lokasi dikenal`);
     }
 
+    // qty_pokok kosong atau bukan angka tidak boleh diperlakukan sebagai 0:
+    // nol berarti "mutasi ini tidak menggeser apa pun", dan itu membuat sel
+    // yang rusak terbaca sebagai saldo yang waras. Barisnya dilewati dan
+    // dilaporkan supaya ada yang membetulkannya.
+    if (baris.qtyPokok === null) {
+      kejanggalan.push(`baris ${baris.id} qty_pokok kosong atau bukan angka`);
+      continue;
+    }
+    const qtyPokok = baris.qtyPokok;
+
     // Lokasi maya tidak pernah punya saldo — barang datang dari luar sistem,
     // barang rusak keluar satu arah. Selain itu, saldo boleh minus: minus
     // berarti ada perpindahan yang belum tercatat dan itu wajib kelihatan.
@@ -115,11 +125,11 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
     // di kartu stok dan daftar pesanan. Kejanggalannya sudah dicatat di atas.
     if (baris.dari !== null && LOKASI_DIKENAL.has(baris.dari) && !LOKASI_MAYA.includes(baris.dari)) {
       const kunci = `${baris.productId}|${baris.dari}`;
-      peta.set(kunci, (peta.get(kunci) ?? 0) - baris.qtyPokok);
+      peta.set(kunci, (peta.get(kunci) ?? 0) - qtyPokok);
     }
     if (baris.ke !== null && LOKASI_DIKENAL.has(baris.ke) && !LOKASI_MAYA.includes(baris.ke)) {
       const kunci = `${baris.productId}|${baris.ke}`;
-      peta.set(kunci, (peta.get(kunci) ?? 0) + baris.qtyPokok);
+      peta.set(kunci, (peta.get(kunci) ?? 0) + qtyPokok);
     }
   }
 

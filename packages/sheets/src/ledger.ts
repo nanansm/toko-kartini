@@ -25,9 +25,11 @@ export interface BarisLog {
   jenis: string;
   productId: string;
   namaSaatItu: string;
-  qtyPokok: number;
+  // null = sel kosong atau bukan angka. Sengaja tidak dipaksa jadi 0 — lihat
+  // arrayKeBarisLog. Pemanggil wajib menanganinya sebagai kejanggalan.
+  qtyPokok: number | null;
   satuanInput: string;
-  qtyInput: number;
+  qtyInput: number | null;
   dari: string | null;
   ke: string | null;
   qtyTerlihat: number | null;
@@ -61,11 +63,6 @@ function angkaAtauNull(raw: string | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-function angkaAtauNol(raw: string | undefined): number {
-  const n = Number(raw ?? '');
-  return Number.isFinite(n) ? n : 0;
-}
-
 // Worker selalu jalan di UTC; getter lokal beda hasil dengan mesin dev
 // saat pergantian bulan, jadi wajib pakai getter UTC di sini.
 export function namaTabLog(waktu: Date): string {
@@ -81,9 +78,9 @@ export function barisLogKeArray(baris: Omit<BarisLog, 'barisSheet'>): (string | 
     baris.jenis,
     baris.productId,
     baris.namaSaatItu,
-    baris.qtyPokok,
+    baris.qtyPokok ?? '',
     baris.satuanInput,
-    baris.qtyInput,
+    baris.qtyInput ?? '',
     baris.dari ?? '',
     baris.ke ?? '',
     baris.qtyTerlihat ?? '',
@@ -111,9 +108,13 @@ export function arrayKeBarisLog(row: string[], barisSheet: number): BarisLog | n
     jenis: row[2] ?? '',
     productId: row[3] ?? '',
     namaSaatItu: row[4] ?? '',
-    qtyPokok: angkaAtauNol(row[5]),
+    // Sel kosong atau berisi sampah dipulangkan null, BUKAN 0. Number('')
+    // memulangkan 0, dan 0 di sini berarti "mutasi ini tidak menggeser apa pun"
+    // — kerusakan data berubah jadi saldo yang kelihatan waras. Pemanggil wajib
+    // memperlakukan null sebagai kejanggalan, bukan sebagai nol.
+    qtyPokok: angkaAtauNull(row[5]),
     satuanInput: row[6] ?? '',
-    qtyInput: angkaAtauNol(row[7]),
+    qtyInput: angkaAtauNull(row[7]),
     dari: kosongJadiNull(row[8]),
     ke: kosongJadiNull(row[9]),
     qtyTerlihat: angkaAtauNull(row[10]),
