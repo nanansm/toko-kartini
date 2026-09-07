@@ -5,6 +5,7 @@ import {
   catatErrorSheet,
   daftarTab,
   duplikatTab,
+  updateRange,
 } from '@kartini/sheets';
 
 interface Env {
@@ -52,6 +53,12 @@ interface SaldoTersimpan {
   waktu: string;
   bulan: string;
   jumlah: number;
+  /** `id` Log terakhir yang ikut terhitung. Pemakai hilir memakai angka ini —
+   *  bukan `waktu` — sebagai batas mutasi susulan: `waktu` dicap SEBELUM Log
+   *  dibaca, jadi baris yang masuk di sela itu sudah ikut terjumlah di sini
+   *  padahal cap waktunya lebih baru, dan memakai waktu sebagai batas membuat
+   *  baris itu terhitung dua kali. */
+  idTerakhir: number;
   saldo: BarisSaldo[];
 }
 
@@ -148,6 +155,9 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
     }
   }
 
+  // id terbesar yang ikut terjumlah. logUrut sudah diurutkan menaik.
+  const idTerakhir = logUrut.length === 0 ? 0 : (logUrut[logUrut.length - 1]?.id ?? 0);
+
   const saldo: BarisSaldo[] = [];
   for (const [kunci, qty] of peta) {
     if (qty === 0) continue;
@@ -173,8 +183,27 @@ export async function hitungSaldo(env: Env, sheetId: string): Promise<RingkasanS
 
   await env.KATALOG.put(
     'saldo:v1',
-    JSON.stringify({ versi: 1, waktu, bulan, jumlah: saldo.length, saldo })
+    JSON.stringify({ versi: 1, waktu, bulan, jumlah: saldo.length, idTerakhir, saldo })
   );
+
+  // Cermin ke tab Stok untuk mata manusia. KV tetap sumber yang dipakai
+  // aplikasi; kegagalan di sini TIDAK boleh menggagalkan hitungSaldo.
+  try {
+    const barisStok: (string | number)[][] = saldo.map((b) => [b.productId, b.lokasi, b.qty, waktu]);
+    const panjangLama = lama?.saldo.length ?? 0;
+    // Baris lama yang lebih panjang dari data baru ditimpa kosong juga,
+    // supaya tidak ada baris basi tersisa di bawah data yang baru ditulis.
+    const totalBaris = Math.max(barisStok.length, panjangLama);
+    for (let i = barisStok.length; i < totalBaris; i++) {
+      barisStok.push(['', '', '', '']);
+    }
+    if (totalBaris > 0) {
+      await updateRange(sheetId, `Stok!A2:D${totalBaris + 1}`, barisStok);
+    }
+  } catch (err) {
+    const pesan = err instanceof Error ? err.message : String(err);
+    await catatErrorSheet(sheetId, `Gagal menulis tab Stok: ${pesan}`, tab);
+  }
 
   return {
     waktu,

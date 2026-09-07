@@ -23,6 +23,9 @@ interface BarisMasuk {
   ke: string | null;
   sebab: string | null;
   catatan: string | null;
+  // Cuma diisi baris OPNAME: angka yang dilihat sistem saat sesi hitung dibuka.
+  // Tanpa ini jejak "kenapa deltanya sekian" hilang dari spreadsheet.
+  qtyTerlihat?: number | null;
   sesiId?: string | null;
 }
 
@@ -48,6 +51,7 @@ interface MuatanAntre {
   sebab: string | null;
   catatan: string | null;
   user: string;
+  qtyTerlihat: number | null;
   sesiId: string | null;
 }
 
@@ -73,6 +77,13 @@ function isBarisMasuk(value: unknown): value is BarisMasuk {
   if (r.sebab !== null && typeof r.sebab !== "string") return false;
   if (r.catatan !== null && typeof r.catatan !== "string") return false;
   if (r.sesiId !== undefined && r.sesiId !== null && typeof r.sesiId !== "string") return false;
+  if (
+    r.qtyTerlihat !== undefined &&
+    r.qtyTerlihat !== null &&
+    (typeof r.qtyTerlihat !== "number" || !Number.isFinite(r.qtyTerlihat))
+  ) {
+    return false;
+  }
   return true;
 }
 
@@ -179,6 +190,7 @@ export class Penulis extends DurableObject {
         sebab: b.sebab,
         catatan: b.catatan,
         user,
+        qtyTerlihat: b.qtyTerlihat ?? null,
         sesiId: b.sesiId ?? null,
       };
 
@@ -317,7 +329,7 @@ export class Penulis extends DurableObject {
           qtyInput: muatan.qtyInput,
           dari: muatan.dari,
           ke: muatan.ke,
-          qtyTerlihat: null,
+          qtyTerlihat: muatan.qtyTerlihat ?? null,
           sebab: muatan.sebab,
           catatan: muatan.catatan,
           user: muatan.user,

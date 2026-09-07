@@ -32,8 +32,14 @@ interface ProdukRingkas {
   id: string;
   nama: string;
   kategori: string;
+  supplier: string | null;
   satuan: { nama: string; pengali: number }[];
 }
+
+// Dinaikkan sendiri dari VERSI_BENTUK: bentuk ringkas ini dipakai halaman
+// pesanan supplier untuk mengelompokkan barang, jadi field `supplier` yang
+// baru ditambahkan wajib membuat konsumen lama sadar bentuknya berubah.
+const VERSI_RINGKAS = 2;
 
 interface MetaKatalog {
   versi: 1;
@@ -72,6 +78,7 @@ function ringkas(produk: ProdukSheet[]): ProdukRingkas[] {
     id: p.productId,
     nama: p.nama,
     kategori: p.kategori,
+    supplier: p.supplier,
     satuan: p.satuan,
   }));
 }
@@ -219,7 +226,7 @@ async function segarkanKatalog(env: Env): Promise<Ringkasan> {
   );
   await env.KATALOG.put(
     'katalog:cari',
-    JSON.stringify({ versi: 1, waktu, jumlah: daftarRingkas.length, produk: daftarRingkas })
+    JSON.stringify({ versi: VERSI_RINGKAS, waktu, jumlah: daftarRingkas.length, produk: daftarRingkas })
   );
   await env.KATALOG.put(
     'katalog:pincang',
