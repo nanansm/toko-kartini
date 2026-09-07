@@ -1,5 +1,6 @@
 import { readSheet, parsePricelist } from '@kartini/sheets';
 import type { ProdukSheet } from '@kartini/sheets';
+import { hitungSaldo, cadangkanLog } from './saldo';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -246,6 +247,31 @@ function tokenValid(request: Request): boolean {
   return tokenDiterima === tokenDiminta;
 }
 
+// Jalankan hitungSaldo & cadangkanLog kalau SHEET_OPS_ID sudah dipasang.
+// Spreadsheet operasional belum dibuat, jadi ketiadaannya dilewati diam-diam
+// (log saja) dan TIDAK melempar — cron katalog tidak boleh ikut mati karenanya.
+async function jalankanTugasSaldo(env: Env): Promise<void> {
+  const sheetId = process.env.SHEET_OPS_ID;
+  if (!sheetId) {
+    console.log('SHEET_OPS_ID belum dipasang, lewati hitungSaldo & cadangkanLog');
+    return;
+  }
+
+  try {
+    const ringkasan = await hitungSaldo(env, sheetId);
+    console.log('hitungSaldo selesai', ringkasan);
+  } catch (err) {
+    console.error('hitungSaldo gagal', err);
+  }
+
+  try {
+    const hasil = await cadangkanLog(env, sheetId);
+    console.log('cadangkanLog selesai', hasil);
+  } catch (err) {
+    console.error('cadangkanLog gagal', err);
+  }
+}
+
 export default {
   async scheduled(_event, env, _ctx) {
     try {
@@ -254,6 +280,8 @@ export default {
     } catch (err) {
       console.error('segarkanKatalog gagal', err);
     }
+
+    await jalankanTugasSaldo(env);
   },
 
   async fetch(request, env, _ctx) {
@@ -273,15 +301,38 @@ export default {
       }
     }
 
+    if (url.pathname === '/saldo' && request.method === 'POST') {
+      const sheetId = process.env.SHEET_OPS_ID;
+      if (!sheetId) {
+        return jsonRespons({ ok: false, pesan: 'SHEET_OPS_ID belum dipasang' }, 500);
+      }
+      try {
+        const ringkasan = await hitungSaldo(env, sheetId);
+        return jsonRespons(ringkasan);
+      } catch (err) {
+        const pesan = err instanceof Error ? err.message : String(err);
+        return jsonRespons({ ok: false, pesan }, 500);
+      }
+    }
+
     if (url.pathname === '/status' && request.method === 'GET') {
-      const [metaStr, galatStr] = await Promise.all([
+      const [metaStr, galatStr, saldoStr] = await Promise.all([
         env.KATALOG.get('katalog:meta'),
         env.KATALOG.get('katalog:error'),
+        env.KATALOG.get('saldo:v1'),
       ]);
+      // Cuma ringkasan saldo yang dikirim, bukan array `saldo` isinya —
+      // itu bisa ratusan baris dan /status tidak perlu memuatnya.
+      let saldo: { versi: number; waktu: string; bulan: string; jumlah: number } | null = null;
+      if (saldoStr) {
+        const parsed = JSON.parse(saldoStr);
+        saldo = { versi: parsed.versi, waktu: parsed.waktu, bulan: parsed.bulan, jumlah: parsed.jumlah };
+      }
       return jsonRespons({
         ok: true,
         meta: metaStr ? JSON.parse(metaStr) : null,
         error: galatStr ? JSON.parse(galatStr) : null,
+        saldo,
       });
     }
 

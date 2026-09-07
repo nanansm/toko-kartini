@@ -1,17 +1,8 @@
 import {
-  LayoutDashboard,
-  Package,
-  Truck,
-  Users,
-  Tags,
-  RefreshCw,
+  Home,
+  ClipboardPlus,
   UserCog,
-  Settings,
-  Boxes,
-  ArrowRightLeft,
-  ClipboardCheck,
-  FileSpreadsheet,
-  BarChart3,
+  AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/roles';
@@ -23,83 +14,33 @@ export interface NavItem {
   roles: UserRole[];
 }
 
+// Isi daftar ini HANYA halaman yang benar-benar ada. Menu lama menunjuk 13
+// rute modul POS/SO yang sudah dipindah ke cabang legacy-postgres — semuanya
+// 404, dan menu yang mengantar staf ke halaman kosong lebih buruk daripada
+// menu pendek. Halaman /hitung, /tinjau, /barang, /pesanan menyusul di Tahap 6.
 export const NAV_ITEMS: NavItem[] = [
   {
-    label: 'Dashboard',
-    href: '/dashboard',
-    icon: LayoutDashboard,
+    label: 'Beranda',
+    href: '/',
+    icon: Home,
     roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
   },
   {
-    label: 'Stok',
-    href: '/inventory',
-    icon: Boxes,
+    label: 'Catat',
+    href: '/catat',
+    icon: ClipboardPlus,
     roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
-  },
-  {
-    label: 'Movement',
-    href: '/movements',
-    icon: ArrowRightLeft,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
-  },
-  {
-    label: 'Stock Opname',
-    href: '/so',
-    icon: ClipboardCheck,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
-  },
-  {
-    label: 'Laporan',
-    href: '/reports',
-    icon: BarChart3,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR'],
-  },
-  {
-    label: 'Import Olsera',
-    href: '/olsera-import',
-    icon: FileSpreadsheet,
-    roles: ['OWNER', 'ADMIN'],
-  },
-  {
-    label: 'Produk',
-    href: '/master/products',
-    icon: Package,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
-  },
-  {
-    label: 'Supplier',
-    href: '/master/suppliers',
-    icon: Truck,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR'],
-  },
-  {
-    label: 'Customer',
-    href: '/master/customers',
-    icon: Users,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR'],
-  },
-  {
-    label: 'Kategori',
-    href: '/master/categories',
-    icon: Tags,
-    roles: ['OWNER', 'ADMIN', 'SUPERVISOR', 'STAF_GUDANG'],
-  },
-  {
-    label: 'Sinkronisasi',
-    href: '/sync',
-    icon: RefreshCw,
-    roles: ['OWNER', 'ADMIN'],
   },
   {
     label: 'Pengguna',
-    href: '/users',
+    href: '/admin/pengguna',
     icon: UserCog,
-    roles: ['OWNER'],
+    roles: ['OWNER', 'ADMIN'],
   },
   {
-    label: 'Pengaturan',
-    href: '/settings',
-    icon: Settings,
-    roles: ['OWNER'],
+    label: 'Data Pincang',
+    href: '/admin/data-pincang',
+    icon: AlertTriangle,
+    roles: ['OWNER', 'ADMIN'],
   },
 ];

@@ -278,6 +278,51 @@ export async function batchGet(
   return result;
 }
 
+export interface TabSheet {
+  gid: number;
+  judul: string;
+}
+
+export async function daftarTab(sheetId: string): Promise<TabSheet[]> {
+  const url = `${SHEETS_API_BASE}/${sheetId}?fields=sheets.properties(sheetId,title)`;
+  const data = await apiRequest<{
+    sheets?: { properties?: { sheetId?: number; title?: string } }[];
+  }>(SCOPE_READONLY, "GET", url);
+  const hasil: TabSheet[] = [];
+  for (const sheet of data.sheets ?? []) {
+    const gid = sheet.properties?.sheetId;
+    const judul = sheet.properties?.title;
+    if (typeof gid === "number" && typeof judul === "string") {
+      hasil.push({ gid, judul });
+    }
+  }
+  return hasil;
+}
+
+/**
+ * Menggandakan satu tab lewat `duplicateSheet`, bukan baca-lalu-tulis-ulang.
+ * Salinannya persis (termasuk baris header dan format), cuma satu subrequest,
+ * dan isi Log tidak perlu melewati Worker sama sekali — penting karena tab Log
+ * tumbuh sepanjang bulan sementara CPU per permintaan dibatasi.
+ */
+export async function duplikatTab(
+  sheetId: string,
+  gidSumber: number,
+  namaBaru: string
+): Promise<void> {
+  const url = `${SHEETS_API_BASE}/${sheetId}:batchUpdate`;
+  await apiRequest(SCOPE_READWRITE, "POST", url, {
+    requests: [
+      {
+        duplicateSheet: {
+          sourceSheetId: gidSumber,
+          newSheetName: namaBaru,
+        },
+      },
+    ],
+  });
+}
+
 export async function appendRows(
   sheetId: string,
   range: string,
