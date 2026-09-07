@@ -157,6 +157,17 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // Alamat workers.dev ini publik dan jatah CPU paket gratis cuma 10 ms —
+  // penjaga sesi wajib mendahului penguraian badan, bukan menyusul.
+  const pengguna = await getCurrentUser();
+  if (!pengguna) {
+    return NextResponse.json({ ok: false, pesan: 'Sesi berakhir, masuk lagi.' }, { status: 401 });
+  }
+
+  if (!canAccess(pengguna.peran, PERMISSIONS.MULAI_SO)) {
+    return NextResponse.json({ ok: false, pesan: 'Tidak berwenang menghitung stok' }, { status: 403 });
+  }
+
   let parsed: unknown;
   try {
     parsed = await request.json();
@@ -166,15 +177,6 @@ export async function POST(request: Request): Promise<NextResponse> {
 
   if (!isBadan(parsed)) {
     return NextResponse.json({ ok: false, pesan: 'Bentuk badan tidak dikenal' }, { status: 400 });
-  }
-
-  const pengguna = await getCurrentUser();
-  if (!pengguna) {
-    return NextResponse.json({ ok: false, pesan: 'Sesi berakhir, masuk lagi.' }, { status: 401 });
-  }
-
-  if (!canAccess(pengguna.peran, PERMISSIONS.MULAI_SO)) {
-    return NextResponse.json({ ok: false, pesan: 'Tidak berwenang menghitung stok' }, { status: 403 });
   }
 
   const sheetId = process.env.SHEET_OPS_ID;

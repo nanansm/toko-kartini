@@ -40,6 +40,23 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  // Alamat workers.dev ini publik dan jatah CPU paket gratis cuma 10 ms —
+  // penjaga sesi wajib mendahului penguraian badan, bukan menyusul.
+  // requireAuth melakukan redirect() — kalau sinyal HP hilang, pengirim latar
+  // akan menganggap 302/HTML itu sukses lalu membuang barisnya dari antrean.
+  // Route ini wajib selalu membalas JSON, termasuk saat sesi habis.
+  const pengguna = await getCurrentUser();
+  if (!pengguna) {
+    return NextResponse.json({ ok: false, pesan: 'Sesi berakhir, masuk lagi.' }, { status: 401 });
+  }
+
+  if (!canAccess(pengguna.peran, PERMISSIONS.CATAT_MUTASI)) {
+    return NextResponse.json(
+      { ok: false, pesan: 'Tidak berwenang mencatat mutasi' },
+      { status: 403 }
+    );
+  }
+
   let parsed: unknown;
   try {
     parsed = await request.json();
@@ -58,21 +75,6 @@ export async function POST(request: Request): Promise<NextResponse> {
     return NextResponse.json(
       { ok: false, pesan: `Kiriman terlalu besar, maksimal ${BATAS_BARIS} baris sekali kirim` },
       { status: 400 }
-    );
-  }
-
-  // requireAuth melakukan redirect() — kalau sinyal HP hilang, pengirim latar
-  // akan menganggap 302/HTML itu sukses lalu membuang barisnya dari antrean.
-  // Route ini wajib selalu membalas JSON, termasuk saat sesi habis.
-  const pengguna = await getCurrentUser();
-  if (!pengguna) {
-    return NextResponse.json({ ok: false, pesan: 'Sesi berakhir, masuk lagi.' }, { status: 401 });
-  }
-
-  if (!canAccess(pengguna.peran, PERMISSIONS.CATAT_MUTASI)) {
-    return NextResponse.json(
-      { ok: false, pesan: 'Tidak berwenang mencatat mutasi' },
-      { status: 403 }
     );
   }
 
