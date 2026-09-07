@@ -22,6 +22,11 @@ interface CachedToken {
 }
 
 const tokenCache = new Map<string, CachedToken>();
+const pendingTokenRequests = new Map<string, Promise<string>>();
+
+function evictCachedToken(cacheKey: string): void {
+  tokenCache.delete(cacheKey);
+}
 
 function loadCredentials(): ServiceAccountCredentials {
   const b64 = process.env.GOOGLE_SERVICE_ACCOUNT_JSON_BASE64;
@@ -121,43 +126,60 @@ async function signJwt(
   return `${signingInput}.${base64UrlEncode(signature)}`;
 }
 
-async function getAccessToken(scope: string): Promise<string> {
+async function getAccessToken(
+  scope: string
+): Promise<{ accessToken: string; cacheKey: string }> {
   const credentials = loadCredentials();
   const cacheKey = `${credentials.client_email}:${scope}`;
   const now = Date.now();
 
   const cached = tokenCache.get(cacheKey);
   if (cached && cached.expiresAt - TOKEN_EXPIRY_SKEW_MS > now) {
-    return cached.accessToken;
+    return { accessToken: cached.accessToken, cacheKey };
   }
 
-  const tokenUri = credentials.token_uri || DEFAULT_TOKEN_URI;
-  const jwt = await signJwt(credentials, scope, tokenUri);
-
-  const body = new URLSearchParams({
-    grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-    assertion: jwt,
-  });
-
-  const res = await fetch(tokenUri, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: body.toString(),
-  });
-
-  if (!res.ok) {
-    const errText = await res.text().catch(() => "");
-    throw new Error(`Failed to obtain Google access token (${res.status}): ${errText}`);
+  const pending = pendingTokenRequests.get(cacheKey);
+  if (pending) {
+    return { accessToken: await pending, cacheKey };
   }
 
-  const data = (await res.json()) as { access_token: string; expires_in: number };
-  const token: CachedToken = {
-    accessToken: data.access_token,
-    expiresAt: now + data.expires_in * 1000,
-    cacheKey,
-  };
-  tokenCache.set(cacheKey, token);
-  return token.accessToken;
+  const requestPromise = (async () => {
+    const tokenUri = credentials.token_uri || DEFAULT_TOKEN_URI;
+    const jwt = await signJwt(credentials, scope, tokenUri);
+
+    const body = new URLSearchParams({
+      grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+      assertion: jwt,
+    });
+
+    const res = await fetch(tokenUri, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: body.toString(),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text().catch(() => "");
+      throw new Error(`Failed to obtain Google access token (${res.status}): ${errText}`);
+    }
+
+    const data = (await res.json()) as { access_token: string; expires_in: number };
+    const token: CachedToken = {
+      accessToken: data.access_token,
+      expiresAt: Date.now() + data.expires_in * 1000,
+      cacheKey,
+    };
+    tokenCache.set(cacheKey, token);
+    return token.accessToken;
+  })();
+
+  pendingTokenRequests.set(cacheKey, requestPromise);
+  try {
+    const accessToken = await requestPromise;
+    return { accessToken, cacheKey };
+  } finally {
+    pendingTokenRequests.delete(cacheKey);
+  }
 }
 
 function sleep(ms: number): Promise<void> {
@@ -171,7 +193,11 @@ async function fetchWithRetry(url: string, init: RequestInit): Promise<Response>
     if (res.ok || !RETRY_STATUSES.has(res.status) || attempt >= MAX_RETRIES - 1) {
       if (!res.ok) {
         const errText = await res.text().catch(() => "");
-        throw new Error(`Sheets API error (${res.status}): ${errText.slice(0, 500)}`);
+        const err = new Error(
+          `Sheets API error (${res.status}): ${errText.slice(0, 500)}`
+        ) as Error & { status?: number };
+        err.status = res.status;
+        throw err;
       }
       return res;
     }
@@ -188,15 +214,36 @@ async function apiRequest<T>(
   url: string,
   body?: unknown
 ): Promise<T> {
-  const token = await getAccessToken(scope);
-  const res = await fetchWithRetry(url, {
+  const { accessToken, cacheKey } = await getAccessToken(scope);
+  const init: RequestInit = {
     method,
     headers: {
-      Authorization: `Bearer ${token}`,
+      Authorization: `Bearer ${accessToken}`,
       "Content-Type": "application/json",
     },
     body: body ? JSON.stringify(body) : undefined,
-  });
+  };
+
+  let res: Response;
+  try {
+    res = await fetchWithRetry(url, init);
+  } catch (err) {
+    const status = (err as { status?: number }).status;
+    if (status === 401 || status === 403) {
+      evictCachedToken(cacheKey);
+      const retried = await getAccessToken(scope);
+      res = await fetchWithRetry(url, {
+        ...init,
+        headers: {
+          ...init.headers,
+          Authorization: `Bearer ${retried.accessToken}`,
+        },
+      });
+    } else {
+      throw err;
+    }
+  }
+
   if (res.status === 204) {
     return {} as T;
   }

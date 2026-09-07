@@ -48,6 +48,12 @@ export function parseProdukRow(row: string[], barisSheet: number): ProdukSheet |
       alasanPincang.push(`Pasangan Isi/Satuan ke-${i + 1} tidak lengkap`);
       return;
     }
+    // Isi 0 atau negatif membuat pengali jadi Infinity/negatif tanpa ada yang
+    // mengeluh. Sheet ini diedit tangan, jadi angkanya diperiksa, bukan dipercaya.
+    if (isi <= 0) {
+      alasanPincang.push(`Isi pada pasangan ke-${i + 1} bukan angka positif`);
+      return;
+    }
     validPairs.push({ isi, nama });
   });
 
