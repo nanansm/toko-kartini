@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import type { UserRole } from '@/lib/roles';
+import { MODE_LAPORAN, RUTE_TULIS } from '@/lib/mode';
 
 export interface NavItem {
   label: string;
@@ -28,7 +29,10 @@ export interface NavItem {
 // `flex-1` per butir, jadi di layar 360px delapan butir menyisakan 45px per
 // label dan tulisannya patah. Laci tidak punya batas itu — butirnya menumpuk
 // ke bawah, selebar laci. Penyaring `roles` yang menjaga siapa melihatnya.
-export const NAV_ITEMS: NavItem[] = [
+// Daftar sumber TIDAK dipangkas — entri rute tulis tetap tertulis di sini
+// supaya menyalakannya lagi cukup ubah `MODE_LAPORAN` jadi `false`.
+// Penyaringannya ada di `NAV_ITEMS` di bawah.
+const NAV_ITEMS_SUMBER: NavItem[] = [
   {
     label: 'Beranda',
     href: '/',
@@ -80,3 +84,7 @@ export const NAV_ITEMS: NavItem[] = [
     roles: ['OWNER'],
   },
 ];
+
+export const NAV_ITEMS: NavItem[] = MODE_LAPORAN
+  ? NAV_ITEMS_SUMBER.filter((item) => !RUTE_TULIS.includes(item.href))
+  : NAV_ITEMS_SUMBER;

@@ -5,6 +5,7 @@ import { bacaLogBulanIni } from '@/lib/log-terkini';
 import { LABEL_LOKASI, LOKASI_NYATA, isKodeLokasi } from '@/lib/lokasi';
 import { LABEL_JENIS, type JenisMutasi } from '@/lib/mutasi';
 import { formatNumber, formatWaktuWIB } from '@/lib/format';
+import { MODE_LAPORAN } from '@/lib/mode';
 import type { BarisLog } from '@kartini/sheets';
 
 function labelLokasi(kode: string | null): string {
@@ -34,7 +35,11 @@ export default async function KartuStokPage({
 
   let riwayat: BarisLog[] = [];
   let riwayatGagal = false;
-  const sheetId = process.env.SHEET_OPS_ID;
+  // Di model laporan tab Log tidak diisi siapa pun: riwayat mutasi ada di
+  // aplikasi gudang tim. Membacanya di sini cuma membakar subrequest untuk
+  // memulangkan daftar kosong yang salah dibaca sebagai "barang tak pernah
+  // bergerak" -- jadi bagian riwayatnya diganti keterangan, bukan tabel kosong.
+  const sheetId = MODE_LAPORAN ? undefined : process.env.SHEET_OPS_ID;
   if (sheetId) {
     try {
       const log = await bacaLogBulanIni(sheetId);
@@ -108,7 +113,11 @@ export default async function KartuStokPage({
 
       <div className="rounded-xl border border-stone-200 bg-white p-4">
         <h2 className="text-lg font-semibold text-stone-900">Riwayat Bulan Ini</h2>
-        {!sheetId || riwayatGagal ? (
+        {MODE_LAPORAN ? (
+          <p className="text-sm text-stone-500 mt-2">
+            Riwayat mutasi ada di aplikasi gudang tim. Layar ini menampilkan hasil akhirnya saja.
+          </p>
+        ) : !sheetId || riwayatGagal ? (
           <p className="text-sm text-stone-500 mt-2">Riwayat tidak bisa dibaca.</p>
         ) : riwayat.length === 0 ? (
           <p className="text-sm text-stone-500 mt-2">Belum ada mutasi bulan ini.</p>

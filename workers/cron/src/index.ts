@@ -1,8 +1,7 @@
 import { readSheet, parsePricelist } from '@kartini/sheets';
 import type { ProdukSheet } from '@kartini/sheets';
-import { hitungSaldo, cadangkanLog } from './saldo';
-import { tutupBulan } from './bulan';
 import { hitungNilai } from './nilai';
+import { tarikStokSO } from './stok-so';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -285,42 +284,36 @@ function tokenValid(request: Request): boolean {
   return tokenDiterima === tokenDiminta;
 }
 
-// Jalankan hitungSaldo & cadangkanLog kalau SHEET_OPS_ID sudah dipasang.
-// Spreadsheet operasional belum dibuat, jadi ketiadaannya dilewati diam-diam
-// (log saja) dan TIDAK melempar — cron katalog tidak boleh ikut mati karenanya.
-async function jalankanTugasSaldo(env: Env): Promise<void> {
-  const sheetId = process.env.SHEET_OPS_ID;
-  if (!sheetId) {
-    console.log('SHEET_OPS_ID belum dipasang, lewati hitungSaldo & cadangkanLog');
-    return;
+// MODEL LAPORAN. Buku besar yang sah ada di aplikasi gudang tim (spreadsheet
+// Stok Opname), bukan di sini. Cron cuma menyalin tab `Stok` milik tim ke KV
+// lalu menghitung nilai uangnya.
+//
+// `tutupBulan`, `hitungSaldo`, dan `cadangkanLog` sengaja TIDAK dipanggil lagi.
+// Ketiganya bekerja di atas tab `Log` + `Saldo_Awal` milik model lama, dan
+// `hitungSaldo` khususnya akan MENIMPA `saldo:v1` hasil tarikan dengan angka
+// yang dihitung dari Log yang sudah tidak diisi siapa pun -- artinya nilai stok
+// di Beranda balik jadi nol tiap 10 menit. Berkas saldo.ts dan bulan.ts
+// dibiarkan utuh supaya arah masih bisa dibalik tanpa menulis ulang.
+async function jalankanTugasStok(env: Env): Promise<void> {
+  const sheetSoId = process.env.SHEET_SO_ID;
+  if (!sheetSoId) {
+    console.log('SHEET_SO_ID belum dipasang, lewati tarikStokSO');
+  } else {
+    try {
+      const ringkasan = await tarikStokSO(env, sheetSoId);
+      console.log('tarikStokSO selesai', ringkasan);
+    } catch (err) {
+      console.error('tarikStokSO gagal', err);
+    }
   }
 
-  try {
-    const hasil = await tutupBulan(sheetId);
-    console.log('tutupBulan selesai', hasil);
-  } catch (err) {
-    console.error('tutupBulan gagal', err);
-  }
-
-  try {
-    const ringkasan = await hitungSaldo(env, sheetId);
-    console.log('hitungSaldo selesai', ringkasan);
-  } catch (err) {
-    console.error('hitungSaldo gagal', err);
-  }
-
+  // Dijalankan walau tarikan gagal: saldo lama di KV tetap punya nilai yang
+  // sah, dan menghentikan hitungNilai cuma membuat Beranda ikut basi.
   try {
     const ringkasan = await hitungNilai(env);
     console.log('hitungNilai selesai', ringkasan);
   } catch (err) {
     console.error('hitungNilai gagal', err);
-  }
-
-  try {
-    const hasil = await cadangkanLog(env, sheetId);
-    console.log('cadangkanLog selesai', hasil);
-  } catch (err) {
-    console.error('cadangkanLog gagal', err);
   }
 }
 
@@ -333,7 +326,7 @@ export default {
       console.error('segarkanKatalog gagal', err);
     }
 
-    await jalankanTugasSaldo(env);
+    await jalankanTugasStok(env);
   },
 
   async fetch(request, env, _ctx) {
@@ -353,13 +346,26 @@ export default {
       }
     }
 
-    if (url.pathname === '/saldo' && request.method === 'POST') {
-      const sheetId = process.env.SHEET_OPS_ID;
-      if (!sheetId) {
-        return jsonRespons({ ok: false, pesan: 'SHEET_OPS_ID belum dipasang' }, 500);
+    // Endpoint /saldo dan /tutup-bulan ditutup, BUKAN dihapus diam-diam:
+    // keduanya menulis ke `saldo:v1` dari model lama dan sekali dipanggil akan
+    // menghapus hasil tarikan dari spreadsheet tim.
+    if (
+      (url.pathname === '/saldo' || url.pathname === '/tutup-bulan') &&
+      request.method === 'POST'
+    ) {
+      return jsonRespons(
+        { ok: false, pesan: 'Dimatikan di model laporan. Sumber saldo sekarang tab Stok spreadsheet SO tim.' },
+        410
+      );
+    }
+
+    if (url.pathname === '/stok-so' && request.method === 'POST') {
+      const sheetSoId = process.env.SHEET_SO_ID;
+      if (!sheetSoId) {
+        return jsonRespons({ ok: false, pesan: 'SHEET_SO_ID belum dipasang' }, 500);
       }
       try {
-        const ringkasan = await hitungSaldo(env, sheetId);
+        const ringkasan = await tarikStokSO(env, sheetSoId);
         return jsonRespons(ringkasan);
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
@@ -372,20 +378,6 @@ export default {
     if (url.pathname === '/nilai' && request.method === 'POST') {
       try {
         const ringkasan = await hitungNilai(env);
-        return jsonRespons(ringkasan);
-      } catch (err) {
-        const pesan = err instanceof Error ? err.message : String(err);
-        return jsonRespons({ ok: false, pesan }, 500);
-      }
-    }
-
-    if (url.pathname === '/tutup-bulan' && request.method === 'POST') {
-      const sheetId = process.env.SHEET_OPS_ID;
-      if (!sheetId) {
-        return jsonRespons({ ok: false, pesan: 'SHEET_OPS_ID belum dipasang' }, 500);
-      }
-      try {
-        const ringkasan = await tutupBulan(sheetId);
         return jsonRespons(ringkasan);
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);

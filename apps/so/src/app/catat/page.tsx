@@ -1,9 +1,15 @@
+import { redirect } from 'next/navigation';
 import { requireRole, PERMISSIONS } from '@/lib/session';
+import { MODE_LAPORAN } from '@/lib/mode';
 import { FormCatat } from '@/components/catat/form-catat';
 
 export const dynamic = 'force-dynamic';
 
 export default async function CatatPage() {
+  // Model laporan: buku besar yang sah ada di aplikasi tim, bukan di sini.
+  // Halaman ini tidak dihapus supaya arah masih bisa dibalik dengan satu saklar.
+  if (MODE_LAPORAN) redirect('/');
+
   await requireRole(PERMISSIONS.CATAT_MUTASI);
 
   return (

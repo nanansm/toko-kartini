@@ -94,7 +94,7 @@ export default async function HomePage() {
           )}
 
           <p className="text-xs text-stone-400">
-            Angka per {formatWaktuWIB(nilai.waktuSaldo)}. Disegarkan tiap 10 menit.
+            Angka per {formatWaktuWIB(nilai.waktuSaldo)}. Ditarik dari aplikasi gudang tim tiap 10 menit.
           </p>
         </>
       ) : (

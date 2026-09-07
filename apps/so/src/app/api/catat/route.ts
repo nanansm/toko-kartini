@@ -3,6 +3,7 @@ import { getCloudflareContext } from '@opennextjs/cloudflare';
 import { getCurrentUser, canAccess, PERMISSIONS } from '@/lib/session';
 import { periksaMutasi, type MasukanMutasi, type BarisMutasi } from '@/lib/mutasi';
 import { petaProdukRingkas } from '@/lib/katalog';
+import { MODE_LAPORAN } from '@/lib/mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,11 +36,23 @@ function isBadanCatat(value: unknown): value is BadanCatat {
   return Array.isArray(r.baris) && r.baris.every(isMasukanMutasi);
 }
 
+// Model laporan: pencatatan pindah ke aplikasi tim, jadi jalur tulis di sini
+// ditutup. 410 -- bukan 404 -- supaya pemanggil lama tahu endpointnya memang
+// sengaja dimatikan, bukan salah alamat.
+function ditutup(): NextResponse {
+  return NextResponse.json(
+    { ok: false, pesan: 'Pencatatan pindah ke aplikasi gudang tim. Layar ini hanya menampilkan laporan.' },
+    { status: 410 }
+  );
+}
+
 export async function GET(): Promise<NextResponse> {
+  if (MODE_LAPORAN) return ditutup();
   return NextResponse.json({ ok: false, pesan: 'Metode tidak didukung' }, { status: 405 });
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  if (MODE_LAPORAN) return ditutup();
   // Alamat workers.dev ini publik dan jatah CPU paket gratis cuma 10 ms —
   // penjaga sesi wajib mendahului penguraian badan, bukan menyusul.
   // requireAuth melakukan redirect() — kalau sinyal HP hilang, pengirim latar

@@ -6,6 +6,7 @@ import { deltaMutlak, deltaSelisih, deltaKePenyesuaian } from '@/lib/opname';
 import { bacaLogBulanIni, pergeseranSejak } from '@/lib/log-terkini';
 import { saldoDiLokasi } from '@/lib/saldo';
 import { isKodeLokasi } from '@/lib/lokasi';
+import { MODE_LAPORAN } from '@/lib/mode';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,7 +26,18 @@ function isBadanTinjau(value: unknown): value is BadanTinjau {
   );
 }
 
+// Model laporan: pencatatan pindah ke aplikasi tim, jadi jalur tulis di sini
+// ditutup. 410 -- bukan 404 -- supaya pemanggil lama tahu endpointnya memang
+// sengaja dimatikan, bukan salah alamat.
+function ditutup(): NextResponse {
+  return NextResponse.json(
+    { ok: false, pesan: 'Pencatatan pindah ke aplikasi gudang tim. Layar ini hanya menampilkan laporan.' },
+    { status: 410 }
+  );
+}
+
 export async function GET(): Promise<NextResponse> {
+  if (MODE_LAPORAN) return ditutup();
   const pengguna = await getCurrentUser();
   if (!pengguna) {
     return NextResponse.json({ ok: false, pesan: 'Sesi berakhir, masuk lagi.' }, { status: 401 });
@@ -50,6 +62,7 @@ export async function GET(): Promise<NextResponse> {
 }
 
 export async function POST(request: Request): Promise<NextResponse> {
+  if (MODE_LAPORAN) return ditutup();
   // Alamat workers.dev ini publik dan jatah CPU Worker paket gratis cuma 10 ms --
   // penjaga sesi & peran wajib mendahului penguraian badan, supaya orang tak
   // dikenal tidak bisa memaksa Worker mengurai JSON sebelum ditolak.
