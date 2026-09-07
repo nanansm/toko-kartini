@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "kartini-gudang",
+  "main": "worker-entry.js",
+  "compatibility_date": "2026-09-07",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "binding": "ASSETS", "directory": ".open-next/assets" },
+  "kv_namespaces": [
+    { "binding": "KATALOG", "id": "GANTI_SETELAH_DIBUAT" },
+    { "binding": "SESI", "id": "GANTI_SETELAH_DIBUAT" }
+  ],
+  "durable_objects": {
+    "bindings": [{ "name": "PENULIS", "class_name": "Penulis" }]
+  },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Penulis"] }],
+  "observability": { "enabled": true }
+}

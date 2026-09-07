@@ -8,11 +8,8 @@
     "dev": "turbo dev",
     "lint": "turbo lint",
     "type-check": "turbo type-check",
-    "db:generate": "pnpm --filter @kartini/db generate",
-    "db:migrate": "pnpm --filter @kartini/db migrate",
-    "db:studio": "pnpm --filter @kartini/db studio",
-    "db:seed": "pnpm --filter @kartini/db seed",
-    "sheets:sync": "pnpm --filter @kartini/sheets sync"
+    "preview": "turbo preview",
+    "deploy": "turbo deploy"
   },
   "devDependencies": {
     "turbo": "^2.3.0",

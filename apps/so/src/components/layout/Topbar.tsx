@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { Menu, Search, Bell, LogOut, ChevronDown } from 'lucide-react';
-import { authClient } from '@/lib/auth-client';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,13 +36,8 @@ export function Topbar({ user }: { user: TopbarUser }) {
     .toUpperCase();
 
   async function handleLogout() {
-    await authClient.signOut({
-      fetchOptions: {
-        onSuccess: () => {
-          window.location.href = '/login';
-        },
-      },
-    });
+    await fetch('/api/keluar', { method: 'POST' });
+    window.location.href = '/masuk';
   }
 
   return (

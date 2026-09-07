@@ -16,3 +16,10 @@ coverage
 
 # knowledge graph lokal - jangan di-commit
 graphify-out/
+
+# Cloudflare / OpenNext
+.open-next/
+.wrangler/
+# Dihasilkan `pnpm cf-typegen`. Tidak dilacak: isinya ikut mendaftar nama-nama
+# variabel dari .env.local, dan repo ini publik. Jalankan cf-typegen setelah clone.
+worker-configuration.d.ts

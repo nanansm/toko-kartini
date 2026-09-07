@@ -1,20 +1,26 @@
 {
   "$schema": "https://turbo.build/schema.json",
-  "globalDependencies": ["**/.env.*local", "**/.env"],
+  "globalDependencies": [
+    "**/.env.*local",
+    "**/.env"
+  ],
   "tasks": {
     "build": {
-      "dependsOn": ["^build"],
-      "outputs": [".next/**", "!.next/cache/**", "dist/**"],
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        ".next/**",
+        "!.next/cache/**",
+        "dist/**"
+      ],
       "env": [
         "NODE_ENV",
-        "DATABASE_URL",
-        "BETTER_AUTH_SECRET",
-        "BETTER_AUTH_URL",
-        "GOOGLE_CLIENT_ID",
-        "GOOGLE_CLIENT_SECRET",
+        "SHEET_PRICELIST_ID",
+        "SHEET_OPS_ID",
+        "SHEET_ADMIN_ID",
         "GOOGLE_SERVICE_ACCOUNT_JSON",
-        "GOOGLE_SHEET_MASTER_ID",
-        "REDIS_URL"
+        "PIN_PEPPER"
       ]
     },
     "dev": {
@@ -23,7 +29,22 @@
     },
     "lint": {},
     "type-check": {
-      "dependsOn": ["^build"]
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "preview": {
+      "cache": false,
+      "persistent": true,
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "deploy": {
+      "cache": false,
+      "dependsOn": [
+        "^build"
+      ]
     }
   }
 }

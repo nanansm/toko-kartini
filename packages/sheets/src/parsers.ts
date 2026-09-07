@@ -1,92 +1,106 @@
-import type { SheetProduct, SheetSupplier, SheetCustomer } from './types';
+import type { HasilParse, ProdukSheet, SatuanTingkat } from './types';
 
 function s(v: unknown): string | null {
-  if (v === null || v === undefined || v === '') return null;
-  return String(v).trim();
+  if (v === null || v === undefined) return null;
+  const str = String(v).trim();
+  return str === '' ? null : str;
 }
 
-function n(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null;
-  const num = typeof v === 'number' ? v : parseFloat(String(v).replace(/[.,\s]/g, ''));
-  return isNaN(num) ? null : num;
+/**
+ * Parse angka format Indonesia.
+ * Titik (.) = pemisah ribuan → dibuang. Koma (,) = pemisah desimal → jadi titik.
+ * "8.620" -> 8620 | "8.620,00" -> 8620 | "6,6" -> 6.6
+ */
+export function angkaID(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'number') return Number.isNaN(v) ? null : v;
+  const raw = String(v).trim();
+  if (raw === '') return null;
+  const cleaned = raw.replace(/\./g, '').replace(',', '.');
+  const num = Number(cleaned);
+  return Number.isNaN(num) ? null : num;
 }
 
-function b(v: unknown, fallback = true): boolean {
-  if (v === null || v === undefined || v === '') return fallback;
-  const str = String(v).trim().toUpperCase();
-  return str === 'TRUE' || str === 'YES' || str === '1';
-}
+const PASANGAN_ISI_SATUAN: Array<[number, number]> = [
+  [7, 8],
+  [9, 10],
+  [11, 12],
+];
 
-// Parse row dari tab Products (header di row 4, data dari row 6)
-export function parseProductRow(row: string[]): SheetProduct | null {
-  const productId = s(row[0]);
-  const productName = s(row[1]);
-  if (!productId || !productName) return null;
+export function parseProdukRow(row: string[], barisSheet: number): ProdukSheet | null {
+  const kolom0 = s(row[0]);
+  if (kolom0 && kolom0.startsWith('===')) return null;
+
+  const skuGrosirRaw = s(row[28]);
+  if (!skuGrosirRaw) return null;
+  const productId = skuGrosirRaw.replace(/-(G|1|2|3)$/i, '');
+
+  const alasanPincang: string[] = [];
+  const satuanGrosirRaw = s(row[6]);
+  if (!satuanGrosirRaw) alasanPincang.push('Satuan Grosir (kolom 6) kosong');
+
+  const validPairs: Array<{ isi: number; nama: string }> = [];
+  PASANGAN_ISI_SATUAN.forEach(([isiIdx, satIdx], i) => {
+    const isi = angkaID(row[isiIdx]);
+    const nama = s(row[satIdx]);
+    if (isi === null && nama === null) return;
+    if (isi === null || nama === null) {
+      alasanPincang.push(`Pasangan Isi/Satuan ke-${i + 1} tidak lengkap`);
+      return;
+    }
+    validPairs.push({ isi, nama });
+  });
+
+  const isiTerbesar = validPairs.length > 0 ? Math.max(...validPairs.map((p) => p.isi)) : 1;
+
+  const satuan: SatuanTingkat[] = [];
+  const seen = new Set<string>();
+  if (satuanGrosirRaw) {
+    satuan.push({ nama: satuanGrosirRaw, pengali: isiTerbesar });
+    seen.add(satuanGrosirRaw);
+  }
+  for (const p of validPairs) {
+    if (seen.has(p.nama)) continue;
+    satuan.push({ nama: p.nama, pengali: isiTerbesar / p.isi });
+    seen.add(p.nama);
+  }
 
   return {
     productId,
-    productName,
-    categoryL1: s(row[2]) ?? '',
-    categoryL2: s(row[3]),
-    supplierName: s(row[4]),
-    unitL1Name: s(row[5]),
-    unitL1ToL2Qty: n(row[6]),
-    unitL2Name: s(row[7]),
-    unitL2ToL3Qty: n(row[8]),
-    unitL3Name: s(row[9]),
-    unitL3ToL4Qty: n(row[10]),
-    unitL4Name: s(row[11]),
-    hppPerL1: n(row[12]),
-    sellPriceGrosirL1: n(row[13]),
-    sellPriceHj1: n(row[14]),
-    sellPriceHj2: n(row[15]),
-    sellPriceHj3: n(row[16]),
-    olseraSku: s(row[17]),
-    isActive: b(row[18], true),
-    notes: s(row[19]),
+    nama: s(row[3]) ?? '',
+    kategori: kolom0 ?? '',
+    brand: s(row[2]),
+    supplier: s(row[4]),
+    hppGrosir: angkaID(row[5]),
+    satuanGrosir: satuanGrosirRaw,
+    satuan,
+    hargaGrosir: angkaID(row[16]),
+    hj1: angkaID(row[13]),
+    hj2: angkaID(row[14]),
+    hj3: angkaID(row[15]),
+    barisSheet,
+    pincang: alasanPincang.length > 0,
+    alasanPincang,
   };
 }
 
-export function parseSupplierRow(row: string[]): SheetSupplier | null {
-  const supplierId = s(row[0]);
-  const supplierName = s(row[1]);
-  if (!supplierId || !supplierName) return null;
+export function parsePricelist(rows: string[][], barisAwal = 3): HasilParse {
+  const produk: ProdukSheet[] = [];
+  const pincang: ProdukSheet[] = [];
+  let dilewati = 0;
 
-  return {
-    supplierId,
-    supplierName,
-    picName: s(row[2]),
-    phone: s(row[3]),
-    whatsapp: s(row[4]),
-    email: s(row[5]),
-    address: s(row[6]),
-    paymentTermDays: n(row[7]),
-    notes: s(row[8]),
-  };
-}
+  rows.forEach((row, i) => {
+    const parsed = parseProdukRow(row, barisAwal + i);
+    if (!parsed) {
+      dilewati++;
+      return;
+    }
+    if (parsed.pincang) {
+      pincang.push(parsed);
+    } else {
+      produk.push(parsed);
+    }
+  });
 
-export function parseCustomerRow(row: string[]): SheetCustomer | null {
-  const customerId = s(row[0]);
-  const customerName = s(row[1]);
-  if (!customerId || !customerName) return null;
-
-  const tier = (s(row[8])?.toUpperCase() ?? 'HJ2') as SheetCustomer['pricingTier'];
-  const validTier = (['GROSIR', 'HJ1', 'HJ2', 'HJ3'] as const).includes(tier as never)
-    ? tier
-    : 'HJ2';
-
-  return {
-    customerId,
-    customerName,
-    customerType: s(row[2]),
-    picName: s(row[3]),
-    phone: s(row[4]),
-    whatsapp: s(row[5]),
-    email: s(row[6]),
-    address: s(row[7]),
-    pricingTier: validTier,
-    creditLimitRp: n(row[9]),
-    paymentTermDays: n(row[10]),
-    notes: s(row[11]),
-  };
+  return { produk, pincang, dilewati };
 }
