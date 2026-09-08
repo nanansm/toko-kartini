@@ -2,6 +2,7 @@ import { readSheet, parsePricelist } from '@kartini/sheets';
 import type { ProdukSheet } from '@kartini/sheets';
 import { hitungNilai } from './nilai';
 import { tarikStokSO } from './stok-so';
+import { bandingStok } from './tim/banding';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -388,6 +389,23 @@ export default {
       try {
         const ringkasan = await hitungNilai(env);
         return jsonRespons(ringkasan);
+      } catch (err) {
+        const pesan = err instanceof Error ? err.message : String(err);
+        return jsonRespons({ ok: false, pesan }, 500);
+      }
+    }
+
+    // Gerbang Fase 5: hitung ulang tab Stok + Selisih SO dari Log/Mutasi lalu
+    // BANDINGKAN dengan isi tab itu sekarang. Tidak menulis apa pun -- selama
+    // skrip Python tim masih dipakai, dua penulis ke tab yang sama saling
+    // menimpa dan tidak ada yang tahu angka siapa yang bertahan.
+    if (url.pathname === '/banding-stok' && request.method === 'POST') {
+      const sheetSoId = process.env.SHEET_SO_ID;
+      if (!sheetSoId) {
+        return jsonRespons({ ok: false, pesan: 'SHEET_SO_ID belum dipasang' }, 500);
+      }
+      try {
+        return jsonRespons(await bandingStok(sheetSoId));
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
         return jsonRespons({ ok: false, pesan }, 500);
