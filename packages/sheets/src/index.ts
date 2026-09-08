@@ -5,6 +5,8 @@ export {
   batchGet,
   appendRows,
   updateRange,
+  bersihkanRange,
+  tulisUlangTab,
   daftarTab,
   duplikatTab,
   buatTab,

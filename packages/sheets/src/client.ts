@@ -409,3 +409,33 @@ export async function updateRange(
   )}?valueInputOption=RAW`;
   await apiRequest(SCOPE_READWRITE, "PUT", url, { values: rows });
 }
+
+/** Kosongkan satu rentang. Berbeda dengan menulis larik kosong: `values:clear`
+ *  benar-benar menghapus isi sel, sedangkan PUT dengan `values: []` tidak
+ *  menyentuh apa pun sama sekali. */
+export async function bersihkanRange(sheetId: string, range: string): Promise<void> {
+  const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(range)}:clear`;
+  await apiRequest(SCOPE_READWRITE, "POST", url, {}, RETRY_STATUSES_TAMBAH);
+}
+
+/** Tulis ulang satu tab dari nol: judul di baris 1, data mulai baris 2.
+ *
+ *  Dibersihkan DULU baru ditulis, bukan sekadar ditimpa. Kalau isi baru lebih
+ *  pendek daripada isi lama — dan itu wajar, satu export POS bisa memuat lebih
+ *  sedikit hari daripada export sebelumnya — sisa baris lama akan tertinggal di
+ *  bawah dan terbaca sebagai penjualan yang sebenarnya sudah tidak ada.
+ *
+ *  Dua panggilan ini TIDAK atomik: kalau penulisan gagal setelah pembersihan
+ *  berhasil, tabnya tinggal judul. Itu sengaja dipilih daripada risiko baris
+ *  hantu — tab yang kosong kelihatan langsung dan tinggal diimpor ulang,
+ *  sedangkan baris lama yang menyelip diam-diam tidak kelihatan siapa pun. */
+export async function tulisUlangTab(
+  sheetId: string,
+  tab: string,
+  judul: readonly string[],
+  baris: (string | number)[][]
+): Promise<void> {
+  const kutip = tab.includes(" ") ? `'${tab}'` : tab;
+  await bersihkanRange(sheetId, `${kutip}!A:Z`);
+  await updateRange(sheetId, `${kutip}!A1`, [[...judul], ...baris]);
+}

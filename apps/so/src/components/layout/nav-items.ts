@@ -6,6 +6,7 @@ import {
   Package,
   ShoppingCart,
   UserCog,
+  FileSpreadsheet,
   AlertTriangle,
   type LucideIcon,
 } from 'lucide-react';
@@ -75,6 +76,12 @@ const NAV_ITEMS_SUMBER: NavItem[] = [
     icon: UserCog,
     // Sama persis dengan PERMISSIONS.KELOLA_PENGGUNA yang dipakai halamannya.
     // Menu yang lebih longgar dari penjaga halaman = staf diantar ke 403.
+    roles: ['OWNER'],
+  },
+  {
+    label: 'Impor Penjualan',
+    href: '/admin/penjualan',
+    icon: FileSpreadsheet,
     roles: ['OWNER'],
   },
   {

@@ -9,4 +9,8 @@
 // menimpa.
 export const MODE_LAPORAN = false;
 
-export const RUTE_TULIS: readonly string[] = ['/catat', '/hitung', '/tinjau'];
+// `/admin/penjualan` ikut di sini karena impor mengganti SELURUH isi tab
+// Penjualan. Kalau aplikasi ini kembali jadi layar laporan, yang mengisi tab itu
+// `import_penjualan.py` milik tim — dua pengisi untuk satu tab berarti yang
+// belakangan menimpa yang duluan tanpa tanda apa pun.
+export const RUTE_TULIS: readonly string[] = ['/catat', '/hitung', '/tinjau', '/admin/penjualan'];
