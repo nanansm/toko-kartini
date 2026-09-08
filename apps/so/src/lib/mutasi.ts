@@ -88,6 +88,31 @@ export interface MasukanMutasi {
   catatan: string | null;
 }
 
+/**
+ * Muatan antrean untuk jalur tim (`POST /api/mutasi` -> DO `Buku` -> tab
+ * `Mutasi` milik tim).
+ *
+ * Bedanya dengan `MasukanMutasi` di atas cuma satu, tapi menentukan: SATU baris
+ * memuat SEMUA satuan sekaligus (`qtySatuan`), bukan satu satuan per baris.
+ * Tab `Mutasi` tim menulis "1 Pack (10 Bks) + 1 Bks" sebagai SATU catatan dengan
+ * satu qty pokok, dan memecahnya jadi dua baris membuat riwayat mereka tidak
+ * lagi sebentuk dengan yang sudah ada di sana.
+ *
+ * `namaSaatItu` cuma untuk daftar antrean di layar HP. Nama yang benar-benar
+ * ditulis diambil server dari katalog -- HP tidak boleh menentukannya.
+ */
+export interface MasukanMutasiTim {
+  clientId: string;
+  jenis: string;
+  productId: string;
+  namaSaatItu: string;
+  dari: string;
+  ke: string;
+  nota: string;
+  sebab: string | null;
+  qtySatuan: Record<string, number>;
+}
+
 export interface BarisMutasi {
   clientId: string;
   jenis: JenisMutasi;

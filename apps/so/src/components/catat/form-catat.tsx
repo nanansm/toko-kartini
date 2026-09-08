@@ -13,7 +13,7 @@ import { type KodeLokasi, LABEL_LOKASI } from '@/lib/lokasi';
 import {
   type JenisMutasi,
   type SebabRusak,
-  type MasukanMutasi,
+  type MasukanMutasiTim,
   LABEL_JENIS,
   LABEL_SEBAB,
   ARAH_SAH,
@@ -422,6 +422,32 @@ export function FormCatat(): React.JSX.Element {
 
     const produk = lembarProduk;
     void (async () => {
+      // DO `Buku` menyimpan SATU baris terbuka per (dari, ke, produk, orang) --
+      // kiriman kedua untuk kunci yang sama MENIMPA yang pertama, bukan
+      // menambah baris (lihat indeks `mutasi_terbuka` di src/do/buku.ts). Kalau
+      // keranjang membolehkan dua baris untuk kunci itu, qty baris pertama
+      // lenyap tanpa satu pun tanda saat dikirim. Digabung di sini, di tempat
+      // staf masih bisa melihat hasilnya.
+      const kembar = keranjang.find(
+        (k) => k.jenis === jenis && k.dari === dari && k.ke === ke && k.productId === produk.productId,
+      );
+      if (kembar) {
+        const gabung: Record<string, number> = { ...kembar.qtySatuan };
+        for (const [nama, q] of Object.entries(qtySatuan)) {
+          gabung[nama] = (gabung[nama] ?? 0) + q;
+        }
+        const hasil = await ubahKeranjang(kembar.id, { qtySatuan: gabung });
+        if (!hasil) {
+          setErrorSimpan('Gagal menyimpan ke keranjang di HP ini. Coba lagi.');
+          return;
+        }
+        setErrorSimpan(null);
+        setPesanSukses(`${produk.nama} digabung ke baris yang sudah ada di keranjang.`);
+        tutupLembar();
+        await muatUlangKeranjang();
+        return;
+      }
+
       const item = await tambahKeranjang({
         jenis,
         productId: produk.productId,
@@ -467,28 +493,34 @@ export function FormCatat(): React.JSX.Element {
     let adaGagal = false;
 
     for (const item of keranjang) {
-      const isian = Object.entries(item.qtySatuan).filter(([, q]) => q > 0);
-      let semuaTerkirim = true;
-      // MasukanMutasi memang satu satuan per baris, dan Log yang mencatat
-      // "3 Krtn" lalu "1 Pcs" apa adanya lebih terbaca daripada satu baris
-      // "37 Pcs" yang sudah diratakan — server yang mengubahnya ke satuan pokok.
-      for (const [satuanInput, qtyInput] of isian) {
-        const muatan: MasukanMutasi = {
-          clientId: crypto.randomUUID(),
-          jenis: item.jenis,
-          productId: item.productId,
-          namaSaatItu: item.nama,
-          satuanInput,
-          qtyInput,
-          dari: item.dari,
-          ke: item.ke,
-          sebab: item.sebab,
-          catatan: item.catatan,
-        };
-        const hasil = await tambahAntre(muatan);
-        if (!hasil) semuaTerkirim = false;
+      const qtySatuan = Object.fromEntries(
+        Object.entries(item.qtySatuan).filter(([, q]) => q > 0),
+      );
+      if (Object.keys(qtySatuan).length === 0) {
+        adaGagal = true;
+        continue;
       }
-      if (semuaTerkirim) {
+      // SATU baris antrean memuat SEMUA satuan barang ini sekaligus, tidak
+      // dipecah per satuan. Tab `Mutasi` tim mencatat "1 Pack (10 Bks) + 1 Bks"
+      // sebagai satu catatan dengan satu qty pokok; memecahnya jadi dua baris
+      // membuat riwayat kita tidak sebentuk dengan yang sudah ada di sana, dan
+      // dua baris terpisah tidak bisa lagi dibatalkan sebagai satu kesatuan.
+      const muatan: MasukanMutasiTim = {
+        clientId: crypto.randomUUID(),
+        jenis: item.jenis,
+        productId: item.productId,
+        namaSaatItu: item.nama,
+        // Asal/tujuan dikunci per jenis surat jalan, jadi keduanya SELALU
+        // terisi saat sampai di sini -- beda dengan MasukanMutasi lama yang
+        // masih membolehkan null.
+        dari: item.dari ?? '',
+        ke: item.ke ?? '',
+        nota: item.catatan ?? '',
+        sebab: item.sebab,
+        qtySatuan,
+      };
+      const hasil = await tambahAntre(muatan);
+      if (hasil) {
         idBerhasil.push(item.id);
       } else {
         adaGagal = true;
@@ -814,7 +846,7 @@ export function FormCatat(): React.JSX.Element {
                     <div>
                       <div className="font-semibold">{it.muatan.namaSaatItu}</div>
                       <div className="text-xs text-muted-foreground">
-                        {it.muatan.qtyInput} {it.muatan.satuanInput} ·{' '}
+                        {ringkasQtySatuan(it.muatan.qtySatuan)} ·{' '}
                         {it.muatan.dari ? LABEL_LOKASI[it.muatan.dari as KodeLokasi] : '-'} →{' '}
                         {it.muatan.ke ? LABEL_LOKASI[it.muatan.ke as KodeLokasi] : '-'}
                       </div>

@@ -99,7 +99,11 @@ async function satuPutaran(): Promise<boolean> {
 
   let res: Response;
   try {
-    res = await fetch('/api/catat', {
+    // `/api/mutasi`, bukan `/api/catat`: yang pertama masuk DO `Buku` lalu
+    // diunggah ke tab `Mutasi` milik tim -- buku besar yang dibaca semua
+    // hitungan hilir. `/api/catat` menulis buku besar kedua (Log_YYYY-MM di
+    // spreadsheet kita sendiri) yang tidak dibaca satu pun hitungan itu.
+    res = await fetch('/api/mutasi', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ baris: item.map((it) => it.muatan) }),

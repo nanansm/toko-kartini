@@ -1,11 +1,11 @@
 import { bukaDb, jalankan, TOKO_ANTRE } from './idb';
-import type { MasukanMutasi } from './mutasi';
+import type { MasukanMutasiTim } from './mutasi';
 
 export type StatusAntre = 'menunggu' | 'terkirim' | 'gagal';
 
 export interface ItemAntre {
   clientId: string;
-  muatan: MasukanMutasi;
+  muatan: MasukanMutasiTim;
   status: StatusAntre;
   pesan: string | null;
   dibuat: number;
@@ -22,7 +22,7 @@ export async function antreanTersedia(): Promise<boolean> {
   return db !== null;
 }
 
-export async function tambahAntre(muatan: MasukanMutasi): Promise<ItemAntre | null> {
+export async function tambahAntre(muatan: MasukanMutasiTim): Promise<ItemAntre | null> {
   const db = await bukaDb();
   if (!db) return null;
 
