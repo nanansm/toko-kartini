@@ -47,3 +47,14 @@ export {
 export type { BarisSesi, BarisTinjau } from './sesi';
 export { KOLOM_MINIMUM, bacaMinimum } from './minimum';
 export type { BarisMinimum } from './minimum';
+export {
+  wib,
+  satuanDasar,
+  rincian,
+  barisLogTim,
+  barisMutasiTim,
+  JENIS_TIM,
+  tulisLogTim,
+  tulisMutasiTim,
+} from './tim';
+export type { SatuanQty, BarisEntriTim, BarisMutasiTim } from './tim';

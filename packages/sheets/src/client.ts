@@ -381,14 +381,21 @@ export async function buatTab(
   await updateRange(sheetId, `${bungkusJudulRentang(judul)}!A1`, [[...header]]);
 }
 
+/** `sisip` OVERWRITE menulis di baris kosong sesudah data terakhir; INSERT_ROWS
+ *  menyisipkan baris baru dan MENGGESER isi di bawahnya. Tab milik tim
+ *  (`Log`, `Mutasi`) dirujuk formula tab lain lewat rentang kolom, jadi
+ *  penulisan ke sana wajib OVERWRITE — persis yang dipakai Edge Function
+ *  mereka. INSERT_ROWS tetap bawaan supaya tab kita sendiri tidak berubah
+ *  perilaku. */
 export async function appendRows(
   sheetId: string,
   range: string,
-  rows: (string | number)[][]
+  rows: (string | number)[][],
+  sisip: "INSERT_ROWS" | "OVERWRITE" = "INSERT_ROWS"
 ): Promise<void> {
   const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(
     range
-  )}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`;
+  )}:append?valueInputOption=RAW&insertDataOption=${sisip}`;
   await apiRequest(SCOPE_READWRITE, "POST", url, { values: rows }, RETRY_STATUSES_TAMBAH);
 }
 

@@ -56,7 +56,6 @@ function bangunSatuan(
   qtySatuan: Record<string, number>,
   produk: ProdukRingkas,
 ): { ok: true; satuan: SatuanQty[] } | { ok: false; pesan: string } {
-  const satuan: SatuanQty[] = [];
   for (const [sku, qty] of Object.entries(qtySatuan)) {
     const tingkat = produk.satuan.find((s) => s.sku === sku);
     if (!tingkat) {
@@ -65,10 +64,24 @@ function bangunSatuan(
     if (!Number.isFinite(qty) || !Number.isInteger(qty) || qty < 0) {
       return { ok: false, pesan: `Jumlah untuk "${tingkat.nama}" wajib bilangan bulat, minimal nol.` };
     }
-    if (qty === 0) continue;
-    satuan.push({ sku, nama: tingkat.nama, pengali: tingkat.pengali, qty });
   }
-  if (satuan.length === 0) {
+
+  // SELURUH satuan produk disimpan, termasuk yang qty-nya 0, dan urutannya
+  // mengikuti katalog (satuan Grosir lebih dulu). Ini bukan pemborosan:
+  // `baseUnitOf` milik tim memilih satuan pertama yang pengalinya 1 dari
+  // daftar ini, dan itulah yang mengisi kolom Satuan + SKU di tab Log dan
+  // Mutasi. Kalau yang qty-nya 0 dibuang, staf yang cuma mengisi karton akan
+  // menghasilkan baris ber-SKU karton, sementara aplikasi tim menulis SKU
+  // satuan dasar untuk kejadian yang sama — dan skrip hilir mereka mencocokkan
+  // SKU itu. Rincian tetap benar karena baris qty 0 disaring saat dirangkai.
+  const satuan: SatuanQty[] = produk.satuan.map((t) => ({
+    sku: t.sku,
+    nama: t.nama,
+    pengali: t.pengali,
+    qty: qtySatuan[t.sku] ?? 0,
+  }));
+
+  if (satuan.every((s) => s.qty === 0)) {
     return { ok: false, pesan: 'Isi minimal satu satuan.' };
   }
   return { ok: true, satuan };
