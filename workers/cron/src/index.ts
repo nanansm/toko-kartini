@@ -405,7 +405,16 @@ export default {
         return jsonRespons({ ok: false, pesan: 'SHEET_SO_ID belum dipasang' }, 500);
       }
       try {
-        return jsonRespons(await bandingStok(sheetSoId));
+        // Id Pricelist ikut supaya tab `Harga` juga masuk gerbang. Kalau belum
+        // dipasang, banding Stok/Selisih tetap jalan dan `harga` balik null --
+        // bukan lulus diam-diam.
+        return jsonRespons(
+          await bandingStok(
+            sheetSoId,
+            process.env.SHEET_PRICELIST_ID,
+            process.env.SHEET_PRICELIST_TAB || 'Master Pricelist New',
+          ),
+        );
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
         return jsonRespons({ ok: false, pesan }, 500);
