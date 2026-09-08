@@ -24,6 +24,7 @@ import {
   LABEL_JENIS,
   LABEL_SEBAB,
   ARAH_SAH,
+  satuanTampil,
 } from '@/lib/mutasi';
 import { cariLokal, katalogSiap, segarkanKatalogLokal, type ProdukRingkas } from '@/lib/katalog-lokal';
 import { ambilSemua, tambahAntre, type ItemAntre, type StatusAntre } from '@/lib/antrean';
@@ -83,11 +84,13 @@ function totalPokokKeranjang(
   satuan: readonly SatuanTingkat[],
 ): { total: number; namaPokok: string } | null {
   if (satuan.length === 0) return null;
-  const urut = [...satuan].sort((a, b) => a.pengali - b.pengali);
+  // satuanTampil() dulu: qtySatuan dikunci per nama satuan, jadi menjumlah
+  // langsung dari katalog akan menghitung nama kembar (130 produk) dua kali.
+  const urut = satuanTampil(satuan).sort((a, b) => a.pengali - b.pengali);
   const pokok = urut[0];
   if (!pokok) return null;
   let total = 0;
-  for (const s of satuan) {
+  for (const s of urut) {
     const q = qtySatuan[s.nama];
     if (q) total += q * s.pengali;
   }

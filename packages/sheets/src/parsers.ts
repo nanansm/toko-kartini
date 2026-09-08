@@ -21,10 +21,12 @@ export function angkaID(v: unknown): number | null {
   return Number.isNaN(num) ? null : num;
 }
 
-const PASANGAN_ISI_SATUAN: Array<[number, number]> = [
-  [7, 8],
-  [9, 10],
-  [11, 12],
+// [isiIdx, satuanIdx, skuIdx, unitOrder]. Kolom dibaca per posisi, bukan per
+// nama header — baris 1 punya empat kolom bernama "SKU" yang identik.
+const PASANGAN_ISI_SATUAN: Array<[number, number, number, number]> = [
+  [7, 8, 29, 1],
+  [9, 10, 30, 2],
+  [11, 12, 31, 3],
 ];
 
 export function parseProdukRow(row: string[], barisSheet: number): ProdukSheet | null {
@@ -39,13 +41,21 @@ export function parseProdukRow(row: string[], barisSheet: number): ProdukSheet |
   const satuanGrosirRaw = s(row[6]);
   if (!satuanGrosirRaw) alasanPincang.push('Satuan Grosir (kolom 6) kosong');
 
-  const validPairs: Array<{ isi: number; nama: string }> = [];
-  PASANGAN_ISI_SATUAN.forEach(([isiIdx, satIdx], i) => {
+  // Aplikasi gudang tim memaksa pengali semua satuan produk ini jadi 1 kalau
+  // ada slot yang punya SKU dan nama satuan tapi Isi-nya tak terbaca
+  // (parseMaster.js:53-58 di repo mereka). Kalau kita menyimpang, angka yang
+  // kita tulis balik ke spreadsheet mereka tidak akan cocok dengan angka lama.
+  let paksaPengaliSatu = false;
+
+  const validPairs: Array<{ isi: number; nama: string; sku: string | null; unitOrder: number }> = [];
+  PASANGAN_ISI_SATUAN.forEach(([isiIdx, satIdx, skuIdx, unitOrder], i) => {
     const isi = angkaID(row[isiIdx]);
     const nama = s(row[satIdx]);
+    const sku = s(row[skuIdx]);
     if (isi === null && nama === null) return;
     if (isi === null || nama === null) {
       alasanPincang.push(`Pasangan Isi/Satuan ke-${i + 1} tidak lengkap`);
+      if (isi === null && nama && sku) paksaPengaliSatu = true;
       return;
     }
     // Isi 0 atau negatif membuat pengali jadi Infinity/negatif tanpa ada yang
@@ -54,21 +64,43 @@ export function parseProdukRow(row: string[], barisSheet: number): ProdukSheet |
       alasanPincang.push(`Isi pada pasangan ke-${i + 1} bukan angka positif`);
       return;
     }
-    validPairs.push({ isi, nama });
+    validPairs.push({ isi, nama, sku, unitOrder });
   });
 
   const isiTerbesar = validPairs.length > 0 ? Math.max(...validPairs.map((p) => p.isi)) : 1;
 
   const satuan: SatuanTingkat[] = [];
   const seen = new Set<string>();
-  if (satuanGrosirRaw) {
-    satuan.push({ nama: satuanGrosirRaw, pengali: isiTerbesar });
-    seen.add(satuanGrosirRaw);
+  if (satuanGrosirRaw && skuGrosirRaw) {
+    satuan.push({
+      nama: satuanGrosirRaw,
+      pengali: Math.round(isiTerbesar * 10000) / 10000,
+      sku: skuGrosirRaw,
+      unitOrder: 0,
+    });
+    seen.add(skuGrosirRaw);
   }
   for (const p of validPairs) {
-    if (seen.has(p.nama)) continue;
-    satuan.push({ nama: p.nama, pengali: isiTerbesar / p.isi });
-    seen.add(p.nama);
+    if (!p.sku) continue;
+    // Dedup pakai SKU, bukan nama satuan. 130 produk punya dua slot bernama
+    // sama persis (mis. "Pack (10pcs)" di slot Grosir dan slot 3) dengan SKU
+    // berbeda; parseMaster.js tim menyimpan dua-duanya. Kalau kita dedup per
+    // nama, 129 SKU satuan hilang dan kolom SKU yang kita tulis ke tab Log
+    // mereka jadi salah.
+    if (seen.has(p.sku)) continue;
+    satuan.push({
+      nama: p.nama,
+      pengali: Math.round((isiTerbesar / p.isi) * 10000) / 10000,
+      sku: p.sku,
+      unitOrder: p.unitOrder,
+    });
+    seen.add(p.sku);
+  }
+
+  if (paksaPengaliSatu) {
+    satuan.forEach((satuanItem) => {
+      satuanItem.pengali = 1;
+    });
   }
 
   return {

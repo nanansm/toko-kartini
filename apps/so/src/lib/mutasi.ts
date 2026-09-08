@@ -37,13 +37,40 @@ export interface SatuanTingkat {
   pengali: number;
 }
 
+/**
+ * Satuan yang boleh tampil sebagai kotak isian: satu baris per NAMA satuan.
+ *
+ * Katalog menyimpan satu baris per SKU satuan (2.738 SKU untuk 1.130 produk,
+ * sama seperti parseMaster.js tim), dan 130 produk punya dua slot bernama sama
+ * persis dengan SKU berbeda. Kalau dua-duanya dijadikan kotak isian, staf tidak
+ * bisa membedakannya dan qty-nya terhitung dua kali. Yang dipertahankan: nama
+ * dengan pengali terkecil — untuk 128 produk kembarannya berpengali sama
+ * sehingga hasilnya identik, dan untuk 2 sisanya (TSU-0012, BHK-0280) datanya
+ * memang bertabrakan di Pricelist, jadi satuan dasarnya yang dipakai.
+ *
+ * Layar dan server WAJIB memakai aturan yang sama — kalau layar memilih Pack ×1
+ * sementara server menghitung Pack ×8, qty yang masuk buku besar bukan qty yang
+ * diketik staf.
+ */
+export function satuanTampil<T extends SatuanTingkat>(satuan: readonly T[]): T[] {
+  const perNama = new Map<string, T>();
+  for (const s of satuan) {
+    const kunci = s.nama.trim().toLowerCase();
+    const lama = perNama.get(kunci);
+    if (!lama || s.pengali < lama.pengali) perNama.set(kunci, s);
+  }
+  return [...perNama.values()];
+}
+
 export function keQtyPokok(
   qtyInput: number,
   satuanNama: string,
   satuan: readonly SatuanTingkat[],
 ): number | null {
   const namaDicari = satuanNama.trim().toLowerCase();
-  const tingkat = satuan.find((s) => s.nama.trim().toLowerCase() === namaDicari);
+  // Pakai pengali terkecil di antara nama yang kembar — aturan yang sama dengan
+  // satuanTampil(), lihat alasannya di sana.
+  const tingkat = satuanTampil(satuan).find((s) => s.nama.trim().toLowerCase() === namaDicari);
   if (!tingkat) return null;
   return qtyInput * tingkat.pengali;
 }

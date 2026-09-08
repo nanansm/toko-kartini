@@ -1,6 +1,8 @@
 export interface SatuanTingkat {
   nama: string;
   pengali: number;
+  sku: string;
+  unitOrder: number;
 }
 
 export interface ProdukSheet {

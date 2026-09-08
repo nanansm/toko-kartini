@@ -34,7 +34,10 @@ interface ProdukRingkas {
   nama: string;
   kategori: string;
   supplier: string | null;
-  satuan: { nama: string; pengali: number }[];
+  /** Satu baris per SKU satuan — SKU-nya ikut karena tab Log & Mutasi di sheet
+   *  tim menyimpan kolom SKU, dan `unitOrder` menentukan satuan mana yang jadi
+   *  satuan dasar (aturan baseUnitOf tim: pengali 1, yang pertama menang). */
+  satuan: { nama: string; pengali: number; sku: string; unitOrder: number }[];
   /** Harga beli per SATUAN POKOK (satuan terkecil), bukan per satuan Grosir.
    *  Pricelist menyimpan HPP di kolom F untuk satuan teratas; dibagi pengali
    *  terbesar hasilnya persis kolom P ("HPP" tingkat terkecil) — sudah dicocokkan
@@ -48,7 +51,10 @@ interface ProdukRingkas {
 // pesanan supplier untuk mengelompokkan barang, jadi field `supplier` yang
 // baru ditambahkan wajib membuat konsumen lama sadar bentuknya berubah.
 // Naik ke 3 waktu `hpp` ditambahkan untuk nilai uang stok di Beranda.
-const VERSI_RINGKAS = 3;
+// Naik ke 4 waktu tiap satuan mulai membawa `sku` + `unitOrder`: katalog kini
+// menyimpan 2.738 SKU satuan (bukan 2.609 nama satuan) supaya angka yang kita
+// tulis ke tab Log/Mutasi tim memakai SKU yang sama dengan parseMaster.js.
+const VERSI_RINGKAS = 4;
 
 interface MetaKatalog {
   versi: 1;

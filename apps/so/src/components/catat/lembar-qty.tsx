@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Sheet, SheetContent, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
+import { satuanTampil } from '@/lib/mutasi';
 
 export interface SatuanTingkat {
   nama: string;
@@ -40,8 +41,12 @@ export function LembarQty({
   // kosong bisa dibedakan dari "0" saat ditampilkan.
   const [nilai, setNilai] = React.useState<Record<string, string>>({});
 
+  // Kotak isian dikunci per NAMA satuan, sedangkan katalog menyimpan satu baris
+  // per SKU — 130 produk punya dua SKU dengan nama satuan sama persis. Tanpa
+  // satuanTampil() keduanya jadi dua kotak yang berbagi satu angka lalu
+  // terhitung dua kali di TOTAL.
   const satuanUrut = React.useMemo(
-    () => [...satuan].sort((a, b) => b.pengali - a.pengali),
+    () => satuanTampil(satuan).sort((a, b) => b.pengali - a.pengali),
     [satuan],
   );
 
