@@ -3,6 +3,7 @@ import type { ProdukSheet } from '@kartini/sheets';
 import { hitungNilai } from './nilai';
 import { tarikStokSO } from './stok-so';
 import { bandingStok } from './tim/banding';
+import { tulisTabTim } from './tim/tulis';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -377,6 +378,82 @@ export default {
       try {
         const ringkasan = await tarikStokSO(env, sheetSoId, process.env.SHEET_OPS_ID);
         return jsonRespons(ringkasan);
+      } catch (err) {
+        const pesan = err instanceof Error ? err.message : String(err);
+        return jsonRespons({ ok: false, pesan }, 500);
+      }
+    }
+
+    // Fase 7c: MENULIS tab Stok / Selisih SO / Harga. Dipisah dari cron dan
+    // dijaga dua lapis karena penjadwal Python tim MASIH HIDUP (dikonfirmasi
+    // Sopian, 8 Sep 2026) -- dua penulis ke tab yang sama saling menimpa dan
+    // tidak ada yang tahu angka siapa yang bertahan. Endpoint ini TIDAK pernah
+    // dipanggil dari `scheduled`; nyalakan hanya di hari penjadwal tim dimatikan.
+    if (url.pathname === '/tulis-tim' && request.method === 'POST') {
+      const sheetSoId = process.env.SHEET_SO_ID;
+      const sheetOpsId = process.env.SHEET_OPS_ID;
+      if (!sheetSoId) {
+        return jsonRespons({ ok: false, pesan: 'SHEET_SO_ID belum dipasang' }, 500);
+      }
+
+      let badan: Record<string, unknown> = {};
+      try {
+        const mentah: unknown = await request.json();
+        if (typeof mentah === 'object' && mentah !== null) badan = mentah as Record<string, unknown>;
+      } catch {
+        // Badan kosong sah: bawaannya uji ke sheet kita sendiri.
+      }
+
+      const tujuan = badan.tujuan === 'tim' ? 'tim' : 'ops';
+      const prefixTab = typeof badan.prefixTab === 'string' ? badan.prefixTab : '';
+      const tab = Array.isArray(badan.tab)
+        ? (badan.tab.filter((t) => t === 'Stok' || t === 'Selisih SO' || t === 'Harga') as (
+            | 'Stok'
+            | 'Selisih SO'
+            | 'Harga'
+          )[])
+        : undefined;
+
+      // Lapis 1: menulis ke spreadsheet tim butuh saklar yang dipasang sengaja
+      // sebagai secret, bukan sekadar badan permintaan yang bisa salah ketik.
+      if (tujuan === 'tim' && process.env.TULIS_TIM !== '1') {
+        return jsonRespons(
+          {
+            ok: false,
+            pesan:
+              'Penulisan ke sheet tim masih dikunci. Penjadwal Python tim masih jalan; ' +
+              'nyalakan TULIS_TIM=1 hanya setelah penjadwal itu dimatikan.',
+          },
+          403,
+        );
+      }
+
+      // Lapis 2: uji ke spreadsheet kita sendiri WAJIB memakai awalan nama tab.
+      // Tanpa itu, uji menimpa tab `Stok` milik kita yang ditulis tarikStokSO
+      // tiap 10 menit -- bentuk kolomnya berbeda (4 kolom vs 13), jadi Beranda
+      // langsung membaca angka yang salah.
+      if (tujuan === 'ops') {
+        if (!sheetOpsId) {
+          return jsonRespons({ ok: false, pesan: 'SHEET_OPS_ID belum dipasang' }, 500);
+        }
+        if (prefixTab.trim() === '') {
+          return jsonRespons(
+            { ok: false, pesan: 'prefixTab wajib diisi saat menulis ke spreadsheet operasional kita' },
+            400,
+          );
+        }
+      }
+
+      try {
+        const hasil = await tulisTabTim({
+          sheetTujuan: tujuan === 'tim' ? sheetSoId : (sheetOpsId as string),
+          sheetSumber: sheetSoId,
+          sheetPricelistId: process.env.SHEET_PRICELIST_ID,
+          tabPricelist: process.env.SHEET_PRICELIST_TAB || 'Master Pricelist New',
+          prefixTab,
+          tab,
+        });
+        return jsonRespons({ ok: true, tujuan, ...hasil });
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
         return jsonRespons({ ok: false, pesan }, 500);

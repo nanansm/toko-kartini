@@ -399,14 +399,22 @@ export async function appendRows(
   await apiRequest(SCOPE_READWRITE, "POST", url, { values: rows }, RETRY_STATUSES_TAMBAH);
 }
 
+/** `mode` menentukan bagaimana Google membaca nilai yang dikirim. `RAW`
+ *  (bawaan) menaruhnya apa adanya — aman untuk angka dan teks, dan itulah yang
+ *  dipakai hampir semua penulisan kita. `USER_ENTERED` membuat Google mengurai
+ *  isinya seperti orang yang mengetik langsung di sel, dan itu SATU-SATUNYA
+ *  cara menulis RUMUS: dengan `RAW`, `=IF(...)` masuk sebagai teks biasa dan
+ *  selnya menampilkan rumusnya, bukan hasilnya. Dipakai untuk sel penanda
+ *  "angka lama / terbaru" di tab Stok dan Selisih SO milik tim. */
 export async function updateRange(
   sheetId: string,
   range: string,
-  rows: (string | number)[][]
+  rows: (string | number)[][],
+  mode: "RAW" | "USER_ENTERED" = "RAW"
 ): Promise<void> {
   const url = `${SHEETS_API_BASE}/${sheetId}/values/${encodeURIComponent(
     range
-  )}?valueInputOption=RAW`;
+  )}?valueInputOption=${mode}`;
   await apiRequest(SCOPE_READWRITE, "PUT", url, { values: rows });
 }
 
