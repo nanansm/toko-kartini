@@ -1,4 +1,4 @@
-import { readSheet, appendRows, updateRange } from './client';
+import { readSheet, appendRows, updateRange, daftarTab, hapusBaris } from './client';
 
 const SHEET_TAB = 'Users';
 const DATA_RANGE = `${SHEET_TAB}!A2:L`;
@@ -98,6 +98,59 @@ export async function setAktif(
   aktif: boolean
 ): Promise<void> {
   await updateRange(sheetId, `${SHEET_TAB}!I${barisSheet}`, [[aktif ? 'TRUE' : 'FALSE']]);
+}
+
+export interface UbahPengguna {
+  nama?: string;
+  peran?: string;
+  lokasi?: string[];
+  /** Diisi hanya kalau PIN direset. Ketiganya wajib bersamaan. */
+  pinHash?: string;
+  pinGaram?: string;
+  pinIterasi?: number;
+}
+
+// Menulis kolom yang diisi saja (bukan A:L penuh) supaya hash PIN yang tidak
+// diminta berubah tidak ikut terkirim ulang.
+export async function ubahPengguna(
+  sheetId: string,
+  barisSheet: number,
+  ubah: UbahPengguna
+): Promise<void> {
+  if (
+    ubah.nama === undefined &&
+    ubah.peran === undefined &&
+    ubah.lokasi === undefined &&
+    ubah.pinHash === undefined &&
+    ubah.pinGaram === undefined &&
+    ubah.pinIterasi === undefined
+  ) {
+    return;
+  }
+
+  if (ubah.nama !== undefined) {
+    await updateRange(sheetId, `${SHEET_TAB}!C${barisSheet}`, [[ubah.nama]]);
+  }
+  if (ubah.peran !== undefined) {
+    await updateRange(sheetId, `${SHEET_TAB}!D${barisSheet}`, [[ubah.peran]]);
+  }
+  if (ubah.lokasi !== undefined) {
+    await updateRange(sheetId, `${SHEET_TAB}!H${barisSheet}`, [[ubah.lokasi.join(';')]]);
+  }
+  if (ubah.pinHash !== undefined && ubah.pinGaram !== undefined && ubah.pinIterasi !== undefined) {
+    await updateRange(sheetId, `${SHEET_TAB}!E${barisSheet}:G${barisSheet}`, [
+      [ubah.pinHash, ubah.pinGaram, ubah.pinIterasi],
+    ]);
+  }
+}
+
+export async function hapusPengguna(sheetId: string, barisSheet: number): Promise<void> {
+  const tabs = await daftarTab(sheetId);
+  const tabUsers = tabs.find((t) => t.judul === SHEET_TAB);
+  if (!tabUsers) {
+    throw new Error(`Tab '${SHEET_TAB}' tidak ditemukan di sheet ${sheetId}`);
+  }
+  await hapusBaris(sheetId, tabUsers.gid, barisSheet);
 }
 
 export async function catatMasukTerakhir(

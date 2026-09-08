@@ -343,6 +343,42 @@ export async function duplikatTab(
 }
 
 /**
+ * Hapus satu baris dari sebuah tab, BUKAN mengosongkan selnya. Bedanya
+ * menentukan: `values:clear` meninggalkan baris hampa di tengah tab, dan
+ * pembaca kita memetakan nomor baris sheet dari indeks larik hasil baca --
+ * satu baris hampa membuat nomor baris tiap data sesudahnya meleset satu, jadi
+ * penulisan berikutnya mengenai baris yang salah tanpa galat apa pun.
+ *
+ * `barisSheet` bernomor seperti yang terlihat di Google Sheets (baris pertama
+ * = 1), sedangkan `deleteDimension` memakai indeks berbasis nol dan batas
+ * atas yang eksklusif -- itu sebabnya `startIndex` dikurangi satu.
+ */
+export async function hapusBaris(
+  sheetId: string,
+  gid: number,
+  barisSheet: number
+): Promise<void> {
+  if (!Number.isInteger(barisSheet) || barisSheet < 1) {
+    throw new Error(`Nomor baris tidak sah: ${barisSheet}`);
+  }
+  const url = `${SHEETS_API_BASE}/${sheetId}:batchUpdate`;
+  await apiRequest(SCOPE_READWRITE, "POST", url, {
+    requests: [
+      {
+        deleteDimension: {
+          range: {
+            sheetId: gid,
+            dimension: "ROWS",
+            startIndex: barisSheet - 1,
+            endIndex: barisSheet,
+          },
+        },
+      },
+    ],
+  });
+}
+
+/**
  * Bungkus judul tab dengan kutip tunggal kalau mengandung karakter selain
  * huruf/angka/garis bawah, supaya aman dipakai di rentang A1 (mis. ada spasi
  * atau tanda baca). Kutip tunggal di dalam judul di-escape ganda sesuai

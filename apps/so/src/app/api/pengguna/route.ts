@@ -4,7 +4,10 @@ import {
   cariPenggunaByUsername,
   tambahPengguna,
   setAktif,
+  ubahPengguna,
+  hapusPengguna,
 } from '@kartini/sheets';
+import type { UbahPengguna } from '@kartini/sheets';
 import { hashPin } from '@/lib/pin';
 import { getCurrentUser, canAccess, PERMISSIONS } from '@/lib/session';
 import type { UserRole } from '@/lib/roles';
@@ -26,6 +29,20 @@ interface BadanUbahStatus {
   aktif: boolean;
 }
 
+interface BadanUbahDetail {
+  username: string;
+  ubah: {
+    nama?: string;
+    peran?: string;
+    lokasi?: string[];
+    pinBaru?: string;
+  };
+}
+
+interface BadanHapusPengguna {
+  username: string;
+}
+
 function isBadanBuatPengguna(value: unknown): value is BadanBuatPengguna {
   if (typeof value !== 'object' || value === null) return false;
   const r = value as Record<string, unknown>;
@@ -43,6 +60,30 @@ function isBadanUbahStatus(value: unknown): value is BadanUbahStatus {
   if (typeof value !== 'object' || value === null) return false;
   const r = value as Record<string, unknown>;
   return typeof r.username === 'string' && typeof r.aktif === 'boolean';
+}
+
+function isBadanUbahDetail(value: unknown): value is BadanUbahDetail {
+  if (typeof value !== 'object' || value === null) return false;
+  const r = value as Record<string, unknown>;
+  if (typeof r.username !== 'string') return false;
+  if (typeof r.ubah !== 'object' || r.ubah === null) return false;
+  const u = r.ubah as Record<string, unknown>;
+  if (u.nama !== undefined && typeof u.nama !== 'string') return false;
+  if (u.peran !== undefined && typeof u.peran !== 'string') return false;
+  if (
+    u.lokasi !== undefined &&
+    !(Array.isArray(u.lokasi) && u.lokasi.every((l) => typeof l === 'string'))
+  ) {
+    return false;
+  }
+  if (u.pinBaru !== undefined && typeof u.pinBaru !== 'string') return false;
+  return true;
+}
+
+function isBadanHapusPengguna(value: unknown): value is BadanHapusPengguna {
+  if (typeof value !== 'object' || value === null) return false;
+  const r = value as Record<string, unknown>;
+  return typeof r.username === 'string';
 }
 
 function pinLemah(pin: string): boolean {
@@ -178,7 +219,117 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, pesan: 'Badan bukan JSON sah' }, { status: 400 });
   }
 
-  if (!isBadanUbahStatus(parsed)) {
+  if (isBadanUbahStatus(parsed)) {
+    const username = parsed.username.trim().toLowerCase();
+    const user = await getCurrentUser();
+
+    if (!parsed.aktif && user?.username.trim().toLowerCase() === username) {
+      return NextResponse.json(
+        { ok: false, pesan: 'Tidak boleh menonaktifkan akun sendiri' },
+        { status: 400 }
+      );
+    }
+
+    const sheetId = process.env.SHEET_ADMIN_ID as string;
+    const target = await cariPenggunaByUsername(sheetId, username);
+    if (!target) {
+      return NextResponse.json({ ok: false, pesan: 'Pengguna tidak ditemukan' }, { status: 404 });
+    }
+
+    await setAktif(sheetId, target.barisSheet, parsed.aktif);
+
+    return NextResponse.json({ ok: true });
+  }
+
+  if (isBadanUbahDetail(parsed)) {
+    const username = parsed.username.trim().toLowerCase();
+    const user = await getCurrentUser();
+
+    const { nama: namaMentah, peran, lokasi, pinBaru } = parsed.ubah;
+    const nama = namaMentah?.trim();
+    if (namaMentah !== undefined && nama === '') {
+      return NextResponse.json({ ok: false, pesan: 'nama: tidak boleh kosong' }, { status: 400 });
+    }
+
+    if (peran !== undefined && !PERAN_SAH.includes(peran as UserRole)) {
+      return NextResponse.json(
+        { ok: false, pesan: `peran: wajib salah satu dari ${PERAN_SAH.join(', ')}` },
+        { status: 400 }
+      );
+    }
+
+    // Pemilik yang tanpa sengaja menurunkan perannya sendiri langsung terkunci
+    // dari halaman ini, dan tidak ada jalan balik lewat aplikasi.
+    if (peran !== undefined && user?.username.trim().toLowerCase() === username) {
+      return NextResponse.json(
+        { ok: false, pesan: 'Tidak boleh mengubah peran akun sendiri' },
+        { status: 400 }
+      );
+    }
+
+    if (pinBaru !== undefined && !/^\d{6}$/.test(pinBaru)) {
+      return NextResponse.json(
+        { ok: false, pesan: 'pin: wajib tepat 6 angka' },
+        { status: 400 }
+      );
+    }
+
+    if (pinBaru !== undefined && pinLemah(pinBaru)) {
+      return NextResponse.json(
+        { ok: false, pesan: 'pin: terlalu mudah ditebak, pilih PIN lain' },
+        { status: 400 }
+      );
+    }
+
+    if (nama === undefined && peran === undefined && lokasi === undefined && pinBaru === undefined) {
+      return NextResponse.json(
+        { ok: false, pesan: 'ubah: tidak ada field yang diisi' },
+        { status: 400 }
+      );
+    }
+
+    const sheetId = process.env.SHEET_ADMIN_ID as string;
+    const target = await cariPenggunaByUsername(sheetId, username);
+    if (!target) {
+      return NextResponse.json({ ok: false, pesan: 'Pengguna tidak ditemukan' }, { status: 404 });
+    }
+
+    const dataUbah: UbahPengguna = {};
+    if (nama !== undefined) dataUbah.nama = nama;
+    if (peran !== undefined) dataUbah.peran = peran;
+    if (lokasi !== undefined) dataUbah.lokasi = lokasi;
+    if (pinBaru !== undefined) {
+      // Jalur hash sama persis dengan POST -- jangan bikin skema hash kedua.
+      const hasilHash = await hashPin(pinBaru);
+      dataUbah.pinHash = hasilHash.hash;
+      dataUbah.pinGaram = hasilHash.garam;
+      dataUbah.pinIterasi = hasilHash.iterasi;
+    }
+
+    await ubahPengguna(sheetId, target.barisSheet, dataUbah);
+
+    return NextResponse.json({ ok: true });
+  }
+
+  return NextResponse.json({ ok: false, pesan: 'Bentuk badan permintaan tidak sah' }, {
+    status: 400,
+  });
+}
+
+export async function DELETE(request: Request): Promise<NextResponse> {
+  const izin = await periksaIzin();
+  if (!izin.ok) {
+    return NextResponse.json({ ok: false, pesan: izin.pesan }, { status: izin.status });
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = await request.json();
+  } catch {
+    return NextResponse.json({ ok: false, pesan: 'Badan bukan JSON sah' }, { status: 400 });
+  }
+
+  if (!isBadanHapusPengguna(parsed)) {
     return NextResponse.json({ ok: false, pesan: 'Bentuk badan permintaan tidak sah' }, {
       status: 400,
     });
@@ -187,9 +338,9 @@ export async function PATCH(request: Request): Promise<NextResponse> {
   const username = parsed.username.trim().toLowerCase();
   const user = await getCurrentUser();
 
-  if (!parsed.aktif && user?.username.trim().toLowerCase() === username) {
+  if (user?.username.trim().toLowerCase() === username) {
     return NextResponse.json(
-      { ok: false, pesan: 'Tidak boleh menonaktifkan akun sendiri' },
+      { ok: false, pesan: 'Tidak boleh menghapus akun sendiri' },
       { status: 400 }
     );
   }
@@ -200,7 +351,21 @@ export async function PATCH(request: Request): Promise<NextResponse> {
     return NextResponse.json({ ok: false, pesan: 'Pengguna tidak ditemukan' }, { status: 404 });
   }
 
-  await setAktif(sheetId, target.barisSheet, parsed.aktif);
+  // Baris di sheet Users boleh hilang -- riwayat di buku besar menyimpan
+  // username sebagai TEKS, bukan rujukan ke baris ini, jadi catatan lama
+  // tidak rusak sesudah akunnya dihapus.
+  if (target.peran === 'OWNER' && target.aktif) {
+    const semua = await ambilSemuaPengguna(sheetId);
+    const ownerAktif = semua.filter((p) => p.peran === 'OWNER' && p.aktif);
+    if (ownerAktif.length <= 1) {
+      return NextResponse.json(
+        { ok: false, pesan: 'Tidak boleh menghapus satu-satunya OWNER aktif' },
+        { status: 400 }
+      );
+    }
+  }
+
+  await hapusPengguna(sheetId, target.barisSheet);
 
   return NextResponse.json({ ok: true });
 }

@@ -10,6 +10,7 @@ export {
   daftarTab,
   duplikatTab,
   buatTab,
+  hapusBaris,
 } from './client';
 export type { TabSheet } from './client';
 export { angkaID, parseProdukRow, parsePricelist } from './parsers';
@@ -20,8 +21,10 @@ export {
   tambahPengguna,
   setAktif,
   catatMasukTerakhir,
+  ubahPengguna,
+  hapusPengguna,
 } from './users';
-export type { PenggunaSheet } from './users';
+export type { PenggunaSheet, UbahPengguna } from './users';
 export {
   KOLOM_LOG,
   namaTabLog,
