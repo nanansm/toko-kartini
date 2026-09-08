@@ -25,5 +25,17 @@
     { "tag": "v2", "new_sqlite_classes": ["Gerbang"] },
     { "tag": "v3", "new_sqlite_classes": ["Buku"] }
   ],
+  // Alamat resmi aplikasi. Dicatat di sini, bukan diklik di dasbor, supaya
+  // deploy dari mesin mana pun memasang domain yang sama dan tidak ada
+  // alamat kedua yang hidup diam-diam. Zona simaung.com ada di akun yang
+  // sama dengan Worker ini (0fdd5878...), syarat wajib custom_domain.
+  //
+  // Alamat *.workers.dev TETAP hidup dan sengaja tidak dimatikan: kalau
+  // pemasangan domain gagal atau DNS-nya bermasalah, itu jalan masuk yang
+  // tersisa untuk memeriksa aplikasinya.
+  "routes": [{ "pattern": "sokartini.simaung.com", "custom_domain": true }],
+  // WAJIB ditulis eksplisit: begitu "routes" ada, wrangler MEMATIKAN alamat
+  // *.workers.dev secara diam-diam kecuali baris ini dipasang.
+  "workers_dev": true,
   "observability": { "enabled": true }
 }
