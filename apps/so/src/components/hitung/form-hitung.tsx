@@ -22,6 +22,13 @@ interface BarisHitung {
   // tidak punya field ini, dan sesi hitung bisa berjalan berhari-hari — draf
   // lama tidak boleh ditolak cuma karena field baru belum ada.
   qtySatuan?: Record<string, number>;
+  // Siapa yang menghitung baris ini. Semua baris yang KITA BUAT di berkas ini
+  // selalu milik pemakai sendiri — satu sesi di /api/hitung terkunci ke satu
+  // username (lihat handleMulai), jadi field ini sengaja dibiarkan kosong
+  // saat menambah baris baru. Tetap disiapkan di sini supaya penanda "sudah
+  // dihitung rekan" di hasil cari langsung punya data dipakai tanpa mengubah
+  // bentuk BarisHitung lagi kalau nanti baris rekan pernah ikut termuat.
+  pengguna?: string;
 }
 
 interface SesiBerjalan {
@@ -82,6 +89,7 @@ function bacaDraf(sesiId: number): BarisHitung[] {
           satuanInput: r.satuanInput,
           qtyInput: r.qtyInput,
           qtySatuan: bacaQtySatuan(r.qtySatuan),
+          pengguna: typeof r.pengguna === 'string' ? r.pengguna : undefined,
         });
       }
     }
@@ -105,6 +113,30 @@ function hapusDraf(sesiId: number): void {
     window.localStorage.removeItem(kunciDraf(sesiId));
   } catch {
     // sama seperti di atas — kegagalan menghapus tidak boleh menahan kiriman
+  }
+}
+
+const KUNCI_RAK_TERAKHIR = 'kartini-rak-terakhir';
+
+// Lokasi terakhir yang dipilih staf, supaya sesi berikutnya tidak mulai dari
+// kosong lagi. Dibungkus try/catch: di peramban yang memblokir penyimpanan
+// situs (mode privat ketat dll), akses localStorage MELEMPAR — dan gagal
+// mengingat rak terakhir bukan alasan buat mematikan seluruh halaman.
+function bacaRakTerakhir(): KodeLokasi | null {
+  try {
+    const v = window.localStorage.getItem(KUNCI_RAK_TERAKHIR);
+    if (v !== null && isKodeLokasi(v) && LOKASI_NYATA.includes(v)) return v;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function simpanRakTerakhir(kode: KodeLokasi): void {
+  try {
+    window.localStorage.setItem(KUNCI_RAK_TERAKHIR, kode);
+  } catch {
+    // gagal mengingat bukan galat fatal — staf cuma memilih ulang manual
   }
 }
 
@@ -148,6 +180,11 @@ export function FormHitung(): React.JSX.Element {
   const [galat, setGalat] = React.useState<string | null>(null);
   const [sibuk, setSibuk] = React.useState(false);
   const [hasil, setHasil] = React.useState<HasilKirim | null>(null);
+  const [pesanSukses, setPesanSukses] = React.useState<string | null>(null);
+  // Default true supaya render pertama (termasuk SSR) tidak menampilkan
+  // peringatan "menunggu sinyal" secara keliru — status jaringan sungguhan
+  // baru dibaca lewat effect di bawah, setelah komponen sudah di peramban.
+  const [online, setOnline] = React.useState(true);
 
   const [lokasiPilihan, setLokasiPilihan] = React.useState<KodeLokasi | null>(null);
 
@@ -185,6 +222,23 @@ export function FormHitung(): React.JSX.Element {
     })();
     return () => {
       dibatalkan = true;
+    };
+  }, []);
+
+  // ---------- lokasi terakhir & status sinyal ----------
+  React.useEffect(() => {
+    const rak = bacaRakTerakhir();
+    if (rak) setLokasiPilihan(rak);
+  }, []);
+
+  React.useEffect(() => {
+    setOnline(window.navigator.onLine);
+    const tandai = () => setOnline(window.navigator.onLine);
+    window.addEventListener('online', tandai);
+    window.addEventListener('offline', tandai);
+    return () => {
+      window.removeEventListener('online', tandai);
+      window.removeEventListener('offline', tandai);
     };
   }, []);
 
@@ -231,6 +285,7 @@ export function FormHitung(): React.JSX.Element {
     setSibuk(true);
     setGalat(null);
     setHasil(null);
+    setPesanSukses(null);
     const { status, data } = await panggil('/api/hitung', {
       method: 'POST',
       body: JSON.stringify({ aksi: 'mulai', lokasi: lokasiPilihan }),
@@ -270,11 +325,31 @@ export function FormHitung(): React.JSX.Element {
     setKataKunci('');
   }
 
+  // "Ganti rak" secara teknis SAMA dengan batalkan sesi: satu sesi di server
+  // terkunci ke satu lokasi (lihat handleMulai di app/api/hitung/route.ts),
+  // jadi pindah rak wajib menutup sesi lama dulu sebelum memilih lokasi baru.
+  // Namanya sengaja dipisah dari "Batalkan sesi" supaya niat staf yang
+  // menekannya jelas dari labelnya.
+  async function gantiRak(): Promise<void> {
+    await batalkanSesi();
+  }
+
   async function kirimHitungan(): Promise<void> {
     if (!sesi || sibuk || baris.length === 0) return;
+    if (!online) {
+      // Mengunggah separuh isi rak membuat rak itu terlihat selesai padahal
+      // belum, dan sisanya tidak akan pernah punya kesempatan naik — jadi
+      // kiriman ditolak total selama sinyal belum ada, bukan dikirim sebagian.
+      setGalat(
+        `Masih ada ${formatNumber(baris.length)} hitungan menunggu sinyal — upload ditunda.`,
+      );
+      return;
+    }
+    const jumlahDikirim = baris.length;
     setSibuk(true);
     setGalat(null);
     setHasil(null);
+    setPesanSukses(null);
     const { status, data } = await panggil('/api/hitung', {
       method: 'POST',
       body: JSON.stringify({
@@ -314,6 +389,7 @@ export function FormHitung(): React.JSX.Element {
       ditolak,
     });
 
+    setPesanSukses(`${formatNumber(jumlahDikirim)} entri tersinkron ke pusat ✓`);
     hapusDraf(sesi.id);
     setSesi(null);
     // Baris yang ditolak dipertahankan di layar lewat `hasil`, bukan di daftar
@@ -407,11 +483,21 @@ export function FormHitung(): React.JSX.Element {
     ? (barisAktif.qtySatuan ?? { [barisAktif.satuanInput]: barisAktif.qtyInput })
     : undefined;
 
+  // Kiriman tidak boleh jalan separuh saat sinyal putus — lihat guard yang
+  // sama di kirimHitungan().
+  const menungguSinyal = !online && baris.length > 0;
+
   return (
     <div className="space-y-4">
       {galat !== null && (
         <Alert variant="destructive">
           <AlertDescription>{galat}</AlertDescription>
+        </Alert>
+      )}
+
+      {pesanSukses !== null && (
+        <Alert className="border-[#0f7a3e]/30 bg-[#0f7a3e]/5">
+          <AlertDescription className="text-[#0f7a3e] font-medium">{pesanSukses}</AlertDescription>
         </Alert>
       )}
 
@@ -466,7 +552,10 @@ export function FormHitung(): React.JSX.Element {
                   <button
                     key={kode}
                     type="button"
-                    onClick={() => setLokasiPilihan(kode)}
+                    onClick={() => {
+                      setLokasiPilihan(kode);
+                      simpanRakTerakhir(kode);
+                    }}
                     aria-pressed={aktif}
                     className={
                       aktif
@@ -487,7 +576,7 @@ export function FormHitung(): React.JSX.Element {
             disabled={lokasiPilihan === null || sibuk}
             onClick={() => void mulaiSesi()}
           >
-            {sibuk ? 'Membuka…' : 'Mulai Hitung'}
+            {sibuk ? 'Membuka…' : 'Mulai Hitung →'}
           </Button>
         </div>
       ) : (
@@ -503,15 +592,30 @@ export function FormHitung(): React.JSX.Element {
                   Dibuka {formatWaktuWIB(sesi.waktuMulai)}
                 </div>
               </div>
-              <Button
-                type="button"
-                variant="ghost"
-                className="text-destructive"
-                disabled={sibuk}
-                onClick={() => void batalkanSesi()}
-              >
-                Batalkan sesi
-              </Button>
+              <div className="flex flex-col items-end gap-1">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-destructive"
+                  disabled={sibuk}
+                  onClick={() => void batalkanSesi()}
+                >
+                  Batalkan sesi
+                </Button>
+                {/* Kecil & terpisah dari alur utama, BUKAN dropdown — mengganti
+                    rak di tengah hitungan mudah bikin barang tercatat di rak
+                    yang salah kalau tombolnya gampang tersenggol tak sengaja. */}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="text-stone-500"
+                  disabled={sibuk}
+                  onClick={() => void gantiRak()}
+                >
+                  Ganti rak
+                </Button>
+              </div>
             </div>
             {sesi.waktuSaldo === null && (
               <p className="mt-3 text-sm text-stone-600">
@@ -528,7 +632,7 @@ export function FormHitung(): React.JSX.Element {
                 id="cari-hitung"
                 value={kataKunci}
                 onChange={(e) => setKataKunci(e.target.value)}
-                placeholder="Ketik nama barang…"
+                placeholder="Cari produk…"
                 autoComplete="off"
               />
               {!katalogAda && (
@@ -540,27 +644,42 @@ export function FormHitung(): React.JSX.Element {
             </div>
 
             <ul className="divide-y divide-stone-200">
-              {hasilCari.map((produk) => (
-                <li key={produk.id}>
-                  <button
-                    type="button"
-                    onClick={() => pilihProduk(produk)}
-                    className="flex w-full items-center justify-between gap-3 py-3 text-left"
-                  >
-                    <span>
-                      <span className="block font-medium text-stone-900">{produk.nama}</span>
-                      <span className="block font-mono text-xs text-stone-500">
-                        {produk.id}
+              {hasilCari.map((produk) => {
+                const sudah = baris.find((b) => b.productId === produk.id);
+                return (
+                  <li key={produk.id}>
+                    <button
+                      type="button"
+                      onClick={() => pilihProduk(produk)}
+                      className="flex w-full items-center justify-between gap-3 py-3 text-left"
+                    >
+                      <span>
+                        <span className="block font-medium text-stone-900">{produk.nama}</span>
+                        <span className="block font-mono text-xs text-stone-500">
+                          {produk.id}
+                        </span>
+                        {/* Tanpa penanda ini, dua orang yang menghitung rak yang
+                            sama saling menimpa pekerjaan tanpa sadar — sudah
+                            siapa dan berapa harus kelihatan sebelum diketik ulang. */}
+                        {sudah && (
+                          <span className="block text-xs text-[#0f7a3e] mt-0.5">
+                            {sudah.pengguna
+                              ? `sudah dihitung ${sudah.pengguna}: `
+                              : 'sudah dihitung: '}
+                            {formatNumber(sudah.qtyInput)}{' '}
+                            {sudah.qtySatuan ? rincianQtySatuan(sudah.qtySatuan) : sudah.satuanInput}
+                          </span>
+                        )}
                       </span>
-                    </span>
-                    {baris.some((b) => b.productId === produk.id) && (
-                      <span className="shrink-0 rounded-full bg-[#0f7a3e] px-2 py-0.5 text-xs font-semibold text-white">
-                        sudah
-                      </span>
-                    )}
-                  </button>
-                </li>
-              ))}
+                      {sudah && (
+                        <span className="shrink-0 rounded-full bg-[#0f7a3e] px-2 py-0.5 text-xs font-semibold text-white">
+                          sudah
+                        </span>
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
@@ -619,14 +738,20 @@ export function FormHitung(): React.JSX.Element {
             )}
           </div>
 
-          <Button
-            type="button"
-            className="h-14 w-full text-base"
-            disabled={baris.length === 0 || sibuk}
-            onClick={() => void kirimHitungan()}
-          >
-            {sibuk ? 'Mengirim…' : `Kirim ${formatNumber(baris.length)} barang`}
-          </Button>
+          {menungguSinyal ? (
+            <p className="rounded-xl border border-stone-200 bg-white p-4 text-sm text-stone-600">
+              Masih ada {formatNumber(baris.length)} hitungan menunggu sinyal — upload ditunda.
+            </p>
+          ) : (
+            <Button
+              type="button"
+              className="h-14 w-full text-base"
+              disabled={baris.length === 0 || sibuk}
+              onClick={() => void kirimHitungan()}
+            >
+              {sibuk ? 'Mengirim…' : `Upload ${formatNumber(baris.length)} entri`}
+            </Button>
+          )}
         </>
       )}
     </div>

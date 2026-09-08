@@ -180,6 +180,7 @@ const RUTE: Record<string, "GET" | "POST"> = {
   "/mutasi/daftar": "GET",
   "/mutasi/klaim": "POST",
   "/mutasi/batalklaim": "POST",
+  "/mutasi/sering": "GET",
   "/keadaan": "GET",
 };
 
@@ -255,6 +256,9 @@ export class Buku extends DurableObject {
     }
     if (url.pathname === "/mutasi/daftar") {
       return this.handleMutasiDaftar(url);
+    }
+    if (url.pathname === "/mutasi/sering") {
+      return this.handleMutasiSering(url);
     }
 
     let parsed: unknown;
@@ -590,6 +594,62 @@ export class Buku extends DurableObject {
     const milik = pengguna ? diurai.filter((b) => b.pengguna === pengguna) : diurai;
 
     return jsonResponse({ ok: true, milik }, 200);
+  }
+
+  // Barang "sering dipakai" dihitung dari BANYAKNYA KEJADIAN (COUNT baris),
+  // bukan jumlah qty -- barang yang diisi ulang tiap hari sedikit-sedikit
+  // (misalnya display) lebih layak muncul di daftar cepat daripada satu
+  // kiriman besar yang cuma terjadi sekali. Riwayat yang sudah diunggah tetap
+  // ikut dihitung karena baris mutasi tidak pernah dihapus setelah unggah.
+  private handleMutasiSering(url: URL): Response {
+    const jenis = url.searchParams.get("jenis");
+    if (!jenis) {
+      return jsonResponse({ ok: false, pesan: "jenis wajib diisi" }, 400);
+    }
+
+    const hariMentah = url.searchParams.get("hari");
+    let hari = 30;
+    if (hariMentah !== null) {
+      const angka = Number(hariMentah);
+      if (!Number.isFinite(angka) || !Number.isInteger(angka) || angka <= 0) {
+        return jsonResponse({ ok: false, pesan: "hari wajib bilangan bulat positif" }, 400);
+      }
+      hari = angka;
+    }
+
+    const batasMentah = url.searchParams.get("batas");
+    let batas = 8;
+    if (batasMentah !== null) {
+      const angka = Number(batasMentah);
+      if (!Number.isFinite(angka) || !Number.isInteger(angka) || angka <= 0) {
+        return jsonResponse({ ok: false, pesan: "batas wajib bilangan bulat positif" }, 400);
+      }
+      batas = angka;
+    }
+
+    const ambang = new Date(Date.now() - hari * 86400000).toISOString();
+
+    const baris = this.ctx.storage.sql
+      .exec(
+        `SELECT product_id, nama_produk, COUNT(*) AS jumlah
+         FROM mutasi
+         WHERE jenis = ? AND dibuat >= ?
+         GROUP BY product_id
+         ORDER BY jumlah DESC
+         LIMIT ?`,
+        jenis,
+        ambang,
+        batas,
+      )
+      .toArray() as unknown as { product_id: string; nama_produk: string; jumlah: number }[];
+
+    const produk = baris.map((b) => ({
+      productId: b.product_id,
+      namaProduk: b.nama_produk,
+      jumlah: b.jumlah,
+    }));
+
+    return jsonResponse({ ok: true, produk }, 200);
   }
 
   // Sama alasannya dengan handleEntriKlaim: SELECT lalu UPDATE tidak bisa

@@ -17,7 +17,7 @@ export default async function CatatPage() {
       <div>
         <h1 className="text-2xl font-semibold text-stone-900">Catat Mutasi</h1>
         <p className="text-sm text-stone-500 mt-1">
-          Cari barang lewat kotak pencarian, lalu catat mutasi stok.
+          Pilih lokasi dulu, baru pilih barangnya. Catatan tersimpan di HP walau sinyal hilang.
         </p>
       </div>
 

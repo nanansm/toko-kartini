@@ -1,3 +1,4 @@
+import * as React from 'react';
 import Link from 'next/link';
 import { ROLE_LABEL } from '@/lib/roles';
 import { canAccess, PERMISSIONS, requireAuth } from '@/lib/session';
@@ -5,6 +6,7 @@ import { ambilMetaKatalog } from '@/lib/katalog';
 import { ambilNilai } from '@/lib/nilai';
 import { LABEL_LOKASI, isKodeLokasi } from '@/lib/lokasi';
 import { formatRupiah, formatNumber, formatWaktuWIB } from '@/lib/format';
+import { MODE_LAPORAN } from '@/lib/mode';
 import { Card, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import {
@@ -15,12 +17,56 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import {
+  PackagePlus,
+  Truck,
+  ArrowLeftRight,
+  AlertTriangle,
+  ClipboardCheck,
+} from 'lucide-react';
 
 export const dynamic = 'force-dynamic';
+
+interface TombolTugasProps {
+  href: string;
+  icon: React.ComponentType<{ className?: string }>;
+  judul: string;
+  keterangan: string;
+  aksen?: boolean;
+}
+
+function TombolTugas({ href, icon: Icon, judul, keterangan, aksen }: TombolTugasProps) {
+  return (
+    <Link href={href} className="block">
+      <Card
+        className={
+          aksen
+            ? 'border-2 border-kartini-green hover:bg-kartini-green/5 transition-colors'
+            : 'hover:bg-stone-50 transition-colors'
+        }
+      >
+        <CardContent className="flex items-center gap-4 py-5">
+          <Icon
+            className={aksen ? 'h-8 w-8 shrink-0 text-kartini-green' : 'h-6 w-6 shrink-0 text-kartini-orange'}
+          />
+          <div>
+            <div className={aksen ? 'text-lg font-bold text-stone-900' : 'font-bold text-stone-900'}>
+              {judul}
+            </div>
+            <div className="text-xs text-stone-500">{keterangan}</div>
+          </div>
+        </CardContent>
+      </Card>
+    </Link>
+  );
+}
 
 export default async function HomePage() {
   const user = await requireAuth();
   const [meta, nilai] = await Promise.all([ambilMetaKatalog(), ambilNilai()]);
+
+  const bisaCatat = canAccess(user.peran, PERMISSIONS.CATAT_MUTASI);
+  const bisaSO = canAccess(user.peran, PERMISSIONS.MULAI_SO);
 
   return (
     <main className="p-4 lg:p-6 space-y-6 max-w-5xl">
@@ -28,6 +74,64 @@ export default async function HomePage() {
         Masuk sebagai <span className="font-semibold text-stone-700">{user.nama}</span> ·{' '}
         {ROLE_LABEL[user.peran]}
       </p>
+
+      {/* MODE_LAPORAN mematikan seluruh rute tulis (lihat lib/mode.ts). Menu
+          yang mengantar staf ke rute mati lebih buruk daripada menu pendek,
+          jadi seluruh blok tugas disembunyikan sekaligus lewat satu saklar. */}
+      {!MODE_LAPORAN && (bisaCatat || bisaSO) && (
+        <div className="space-y-6">
+          {bisaCatat && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-bold text-stone-700">Pekerjaan hari ini</h2>
+              <TombolTugas
+                href="/catat?jenis=ISI_DISPLAY"
+                icon={PackagePlus}
+                judul="Isi Ulang Display"
+                keterangan="Gudang ke Area Display"
+                aksen
+              />
+            </div>
+          )}
+
+          {bisaCatat && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-bold text-stone-700">Lebih jarang</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <TombolTugas
+                  href="/catat?jenis=DATANG"
+                  icon={Truck}
+                  judul="Barang Datang"
+                  keterangan="Terima kiriman supplier"
+                />
+                <TombolTugas
+                  href="/catat?jenis=PINDAH"
+                  icon={ArrowLeftRight}
+                  judul="Pindah Gudang"
+                  keterangan="Antar gudang"
+                />
+                <TombolTugas
+                  href="/catat?jenis=RUSAK"
+                  icon={AlertTriangle}
+                  judul="Barang Rusak"
+                  keterangan="Rusak, kadaluarsa, dipakai toko"
+                />
+              </div>
+            </div>
+          )}
+
+          {bisaSO && (
+            <div className="space-y-2">
+              <h2 className="text-sm font-bold text-stone-700">Bulanan</h2>
+              <TombolTugas
+                href="/hitung"
+                icon={ClipboardCheck}
+                judul="Hitung Stok"
+                keterangan="Stok opname per gudang"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {nilai ? (
         <>

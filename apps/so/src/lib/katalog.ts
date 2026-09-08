@@ -1,5 +1,6 @@
 import { getCloudflareContext } from '@opennextjs/cloudflare';
 import type { ProdukSheet } from '@kartini/sheets';
+import { saringUrut } from './cari-skor';
 
 export interface BungkusKatalog {
   versi: number;
@@ -97,17 +98,17 @@ export async function cariProduk(kata: string, batas = BATAS_CARI_BAKU): Promise
   const katalog = await ambilKatalogRingkas();
   if (!katalog) return [];
 
-  const kataKunci = kata.trim().toLowerCase();
-  if (!kataKunci) {
+  // Kata kunci kosong = daftar awal katalog. Ini SENGAJA beda dengan
+  // `saringUrut` (yang balas larik kosong): halaman /barang memakai fungsi ini
+  // sebagai daftar telusur, bukan cuma kotak cari, jadi kosong berarti
+  // "tampilkan dari awal", bukan "tidak ada hasil".
+  if (kata.trim().length === 0) {
     return katalog.produk.slice(0, batas);
   }
 
-  const hasil: ProdukRingkas[] = [];
-  for (const produk of katalog.produk) {
-    if (produk.nama.toLowerCase().includes(kataKunci) || produk.id.toLowerCase().includes(kataKunci)) {
-      hasil.push(produk);
-      if (hasil.length >= batas) break;
-    }
-  }
-  return hasil;
+  // Urutan hasil mengikuti aturan skor aplikasi tim (SKU persis > nama persis >
+  // berawalan > mengandung > semua kata urutan bebas), bukan sekadar urutan
+  // katalog: staf mengetik "gula" dan mengharapkan Gula Pasir di atas, bukan
+  // barang pertama di katalog yang kebetulan mengandung kata itu.
+  return saringUrut(katalog.produk, kata, batas);
 }
