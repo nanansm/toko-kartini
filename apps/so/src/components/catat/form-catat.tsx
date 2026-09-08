@@ -1,6 +1,7 @@
 'use client';
 
 import * as React from 'react';
+import { Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -14,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { LembarQty, type SatuanTingkat } from '@/components/catat/lembar-qty';
 import { type KodeLokasi, LABEL_LOKASI } from '@/lib/lokasi';
 import {
   type JenisMutasi,
@@ -26,6 +28,15 @@ import {
 import { cariLokal, katalogSiap, segarkanKatalogLokal, type ProdukRingkas } from '@/lib/katalog-lokal';
 import { ambilSemua, tambahAntre, type ItemAntre, type StatusAntre } from '@/lib/antrean';
 import { type KeadaanKirim, langgananKirim, mulaiPengirim, picuKirim } from '@/lib/pengirim';
+import {
+  type ItemKeranjang,
+  ambilKeranjang,
+  hapusKeranjang,
+  kosongkanKeranjang,
+  pulihkanKeranjang,
+  tambahKeranjang,
+  ubahKeranjang,
+} from '@/lib/keranjang';
 
 // Opname (hitung stok) punya jalur sendiri yang belum dibangun — jangan ditampilkan di sini.
 type TabJenis = Exclude<JenisMutasi, 'OPNAME'>;
@@ -49,6 +60,40 @@ const KELAS_STATUS_ANTRE: Record<StatusAntre, string> = {
   gagal: 'border-transparent bg-destructive text-white',
 };
 
+// Baris keranjang cuma menyimpan qty per nama satuan, bukan pengalinya — untuk
+// menyunting/menampilkan totalnya perlu satuan produk itu dicari ulang dari
+// katalog lokal (bukan disimpan dobel di keranjang.ts).
+async function cariSatuanProduk(productId: string): Promise<SatuanTingkat[] | null> {
+  const hasil = await cariLokal(productId, 5);
+  const cocok = hasil.find((p) => p.id === productId);
+  return cocok ? cocok.satuan : null;
+}
+
+function ringkasQtySatuan(qtySatuan: Record<string, number>): string {
+  return Object.entries(qtySatuan)
+    .filter(([, q]) => q > 0)
+    .map(([nama, q]) => `${q} ${nama}`)
+    .join(' + ');
+}
+
+// Total dalam satuan pokok (pengali terkecil) — rumus sama persis dengan TOTAL
+// di LembarQty, supaya angka yang dilihat staf konsisten di kedua tempat.
+function totalPokokKeranjang(
+  qtySatuan: Record<string, number>,
+  satuan: readonly SatuanTingkat[],
+): { total: number; namaPokok: string } | null {
+  if (satuan.length === 0) return null;
+  const urut = [...satuan].sort((a, b) => a.pengali - b.pengali);
+  const pokok = urut[0];
+  if (!pokok) return null;
+  let total = 0;
+  for (const s of satuan) {
+    const q = qtySatuan[s.nama];
+    if (q) total += q * s.pengali;
+  }
+  return { total, namaPokok: pokok.nama };
+}
+
 export function FormCatat(): React.JSX.Element {
   const [jenis, setJenis] = React.useState<TabJenis>('DATANG');
 
@@ -70,10 +115,28 @@ export function FormCatat(): React.JSX.Element {
     arahSah.ke.length === 1 ? (arahSah.ke[0] ?? null) : null,
   );
 
-  const [satuanTerpilih, setSatuanTerpilih] = React.useState('');
-  const [jumlah, setJumlah] = React.useState(1);
   const [sebab, setSebab] = React.useState<SebabRusak | ''>('');
   const [catatan, setCatatan] = React.useState('');
+
+  // Sheet qty: `lembarProduk` non-null artinya lembar terbuka. `lembarEditId`
+  // null = mengisi entri baru dari hasil pencarian; terisi = menyunting baris
+  // keranjang yang sudah ada (cuma qty-nya yang boleh berubah).
+  const [lembarProduk, setLembarProduk] = React.useState<{
+    productId: string;
+    nama: string;
+    satuan: SatuanTingkat[];
+  } | null>(null);
+  const [lembarNilaiAwal, setLembarNilaiAwal] = React.useState<Record<string, number> | undefined>(
+    undefined,
+  );
+  const [lembarEditId, setLembarEditId] = React.useState<string | null>(null);
+
+  // Cache satuan per productId supaya baris keranjang tidak perlu mencari
+  // katalog berulang tiap render.
+  const [satuanCache, setSatuanCache] = React.useState<Record<string, SatuanTingkat[]>>({});
+
+  const [keranjang, setKeranjang] = React.useState<ItemKeranjang[]>([]);
+  const [notifHapus, setNotifHapus] = React.useState<ItemKeranjang | null>(null);
 
   const [errorSimpan, setErrorSimpan] = React.useState<string | null>(null);
   const [daftar, setDaftar] = React.useState<ItemAntre[]>([]);
@@ -89,8 +152,12 @@ export function FormCatat(): React.JSX.Element {
     setDaftar(await ambilSemua());
   }, []);
 
+  const muatUlangKeranjang = React.useCallback(async () => {
+    setKeranjang(await ambilKeranjang());
+  }, []);
+
   // Pengirim jalan di latar belakang selama formulir dipasang — bukan cuma
-  // saat tombol Simpan ditekan, supaya antrean lama juga ikut tercicil.
+  // saat tombol Kirim semua ditekan, supaya antrean lama juga ikut tercicil.
   React.useEffect(() => {
     const berhentiPengirim = mulaiPengirim();
     const berhentiLanggan = langgananKirim((k) => {
@@ -103,6 +170,10 @@ export function FormCatat(): React.JSX.Element {
       berhentiPengirim();
     };
   }, [muatUlangDaftar]);
+
+  React.useEffect(() => {
+    void muatUlangKeranjang();
+  }, [muatUlangKeranjang]);
 
   // Katalog disegarkan di latar belakang — formulir tidak menunggunya supaya
   // tetap bisa dipakai walau sinyal Gudang Ciherang lagi jelek.
@@ -120,8 +191,43 @@ export function FormCatat(): React.JSX.Element {
     };
   }, []);
 
+  // Isi cache satuan buat baris keranjang yang productId-nya belum pernah
+  // muncul di hasil pencarian — supaya rincian & total di daftar tetap terisi
+  // walau baris itu dibuat sebelum sesi ini (katalog beda perangkat).
+  React.useEffect(() => {
+    const belum = keranjang.filter((it) => !satuanCache[it.productId]);
+    if (belum.length === 0) return;
+    let dibatalkan = false;
+    void Promise.all(belum.map((it) => cariSatuanProduk(it.productId))).then((hasil) => {
+      if (dibatalkan) return;
+      setSatuanCache((prev) => {
+        const salinan = { ...prev };
+        belum.forEach((it, i) => {
+          const s = hasil[i];
+          if (s) salinan[it.productId] = s;
+        });
+        return salinan;
+      });
+    });
+    return () => {
+      dibatalkan = true;
+    };
+  }, [keranjang, satuanCache]);
+
   const opsiTujuan =
     jenis === 'PINDAH' ? arahSah.ke.filter((k) => k !== dari) : arahSah.ke;
+
+  function tutupLembar(): void {
+    if (lembarEditId === null) {
+      // Batal saat mengisi entri baru — kembali ke pencarian, bukan menggantung
+      // di kartu produk tanpa cara membuka lembarnya lagi.
+      setProdukTerpilih(null);
+      setKataKunci('');
+    }
+    setLembarProduk(null);
+    setLembarEditId(null);
+    setLembarNilaiAwal(undefined);
+  }
 
   function gantiTab(nilai: string): void {
     if (!isTabJenis(nilai)) return;
@@ -131,12 +237,17 @@ export function FormCatat(): React.JSX.Element {
     setHasilCari([]);
     setErrorCari(null);
     setProdukTerpilih(null);
-    setSatuanTerpilih('');
-    setJumlah(1);
+    setLembarProduk(null);
+    setLembarEditId(null);
+    setLembarNilaiAwal(undefined);
     setSebab('');
     setCatatan('');
+    setErrorSimpan(null);
+    setNotifHapus(null);
     setDari(arahBaru.dari.length === 1 ? (arahBaru.dari[0] ?? null) : null);
     setKe(arahBaru.ke.length === 1 ? (arahBaru.ke[0] ?? null) : null);
+    // Keranjang SENGAJA tidak dikosongkan — tiap item sudah menyimpan jenisnya
+    // sendiri, mengosongkannya di sini berarti membuang pekerjaan staf.
   }
 
   React.useEffect(() => {
@@ -159,6 +270,13 @@ export function FormCatat(): React.JSX.Element {
         .then((hasil) => {
           setErrorCari(null);
           setHasilCari(hasil);
+          setSatuanCache((prev) => {
+            const salinan = { ...prev };
+            for (const p of hasil) {
+              if (!salinan[p.id]) salinan[p.id] = p.satuan;
+            }
+            return salinan;
+          });
         })
         .finally(() => setMencari(false));
     }, 300);
@@ -168,61 +286,151 @@ export function FormCatat(): React.JSX.Element {
   function pilihProduk(p: ProdukRingkas): void {
     setProdukTerpilih(p);
     setHasilCari([]);
-    const urut = [...p.satuan].sort((a, b) => b.pengali - a.pengali);
-    setSatuanTerpilih(urut[0]?.nama ?? '');
+    setErrorSimpan(null);
+    setNotifHapus(null);
+    setLembarProduk({ productId: p.id, nama: p.nama, satuan: p.satuan });
+    setLembarNilaiAwal(undefined);
+    setLembarEditId(null);
   }
 
   function gantiProduk(): void {
     setProdukTerpilih(null);
     setKataKunci('');
     setHasilCari([]);
-    setSatuanTerpilih('');
+    setLembarProduk(null);
+    setLembarEditId(null);
+    setLembarNilaiAwal(undefined);
   }
 
-  const satuanUrut = produkTerpilih
-    ? [...produkTerpilih.satuan].sort((a, b) => b.pengali - a.pengali)
-    : [];
+  async function bukaSuntingBaris(item: ItemKeranjang): Promise<void> {
+    setNotifHapus(null);
+    setErrorSimpan(null);
+    const dariCache = satuanCache[item.productId];
+    const satuan = dariCache ?? (await cariSatuanProduk(item.productId));
+    setLembarProduk({
+      productId: item.productId,
+      nama: item.nama,
+      // Katalog lokal mungkin belum sinkron utk produk lama — fallback pakai
+      // satuan yang sudah tercatat di baris ini sendiri (pengali dianggap 1,
+      // cuma memengaruhi tampilan TOTAL, bukan qty yang disimpan).
+      satuan: satuan ?? Object.keys(item.qtySatuan).map((nama) => ({ nama, pengali: 1 })),
+    });
+    setLembarNilaiAwal(item.qtySatuan);
+    setLembarEditId(item.id);
+  }
 
-  const jumlahSah = Number.isFinite(jumlah) && jumlah >= 1;
-  const bisaSimpan =
-    produkTerpilih !== null &&
-    dari !== null &&
-    ke !== null &&
-    satuanTerpilih !== '' &&
-    jumlahSah &&
-    (jenis !== 'RUSAK' || sebab !== '') &&
-    (jenis !== 'PINDAH' || dari !== ke);
+  function simpanLembar(qtySatuan: Record<string, number>): void {
+    if (!lembarProduk) return;
 
-  async function simpan(): Promise<void> {
-    if (!bisaSimpan || !produkTerpilih || dari === null || ke === null) return;
-
-    // clientId baru tiap simpan — pengiriman ulang & dedup jadi urusan
-    // antrean/pengirim, bukan komponen ini.
-    const clientId = crypto.randomUUID();
-    const muatan: MasukanMutasi = {
-      clientId,
-      jenis,
-      productId: produkTerpilih.id,
-      namaSaatItu: produkTerpilih.nama,
-      satuanInput: satuanTerpilih,
-      qtyInput: jumlah,
-      dari,
-      ke,
-      sebab: jenis === 'RUSAK' ? sebab : null,
-      catatan: catatan.trim() === '' ? null : catatan.trim(),
-    };
-
-    const item = await tambahAntre(muatan);
-    if (!item) {
-      // IndexedDB tak tersedia — jangan pura-pura tersimpan.
-      setErrorSimpan('Gagal menyimpan di HP ini. Coba lagi.');
+    if (lembarEditId) {
+      const id = lembarEditId;
+      void (async () => {
+        const hasil = await ubahKeranjang(id, { qtySatuan });
+        if (!hasil) {
+          setErrorSimpan('Gagal mengubah barang di keranjang. Coba lagi.');
+          return;
+        }
+        setErrorSimpan(null);
+        tutupLembar();
+        await muatUlangKeranjang();
+      })();
       return;
     }
 
-    setErrorSimpan(null);
-    setJumlah(1);
-    setSebab('');
-    setCatatan('');
+    // Entri baru: lembar cuma tahu qty, jadi arah & sebab divalidasi di sini
+    // sebelum masuk keranjang.
+    if (dari === null || ke === null) {
+      setErrorSimpan('Asal dan tujuan wajib diisi.');
+      return;
+    }
+    if (jenis === 'PINDAH' && dari === ke) {
+      setErrorSimpan('Asal dan tujuan tidak boleh sama.');
+      return;
+    }
+    if (jenis === 'RUSAK' && sebab === '') {
+      setErrorSimpan('Sebab wajib diisi untuk barang rusak.');
+      return;
+    }
+
+    const produk = lembarProduk;
+    void (async () => {
+      const item = await tambahKeranjang({
+        jenis,
+        productId: produk.productId,
+        nama: produk.nama,
+        qtySatuan,
+        dari,
+        ke,
+        sebab: jenis === 'RUSAK' ? sebab : null,
+        catatan: catatan.trim() === '' ? null : catatan.trim(),
+      });
+      if (!item) {
+        // IndexedDB tak tersedia — jangan pura-pura tersimpan.
+        setErrorSimpan('Gagal menyimpan ke keranjang di HP ini. Coba lagi.');
+        return;
+      }
+      setErrorSimpan(null);
+      tutupLembar();
+      await muatUlangKeranjang();
+    })();
+  }
+
+  async function hapusBaris(id: string): Promise<void> {
+    setNotifHapus(null);
+    const dihapus = await hapusKeranjang(id);
+    if (dihapus) setNotifHapus(dihapus);
+    await muatUlangKeranjang();
+  }
+
+  async function urungkanHapus(): Promise<void> {
+    if (!notifHapus) return;
+    const berhasil = await pulihkanKeranjang(notifHapus);
+    setNotifHapus(null);
+    if (!berhasil) setErrorSimpan('Gagal mengurungkan penghapusan.');
+    await muatUlangKeranjang();
+  }
+
+  async function kirimSemua(): Promise<void> {
+    if (keranjang.length === 0) return;
+    setNotifHapus(null);
+
+    const idBerhasil: string[] = [];
+    let adaGagal = false;
+
+    for (const item of keranjang) {
+      const isian = Object.entries(item.qtySatuan).filter(([, q]) => q > 0);
+      let semuaTerkirim = true;
+      // MasukanMutasi memang satu satuan per baris, dan Log yang mencatat
+      // "3 Krtn" lalu "1 Pcs" apa adanya lebih terbaca daripada satu baris
+      // "37 Pcs" yang sudah diratakan — server yang mengubahnya ke satuan pokok.
+      for (const [satuanInput, qtyInput] of isian) {
+        const muatan: MasukanMutasi = {
+          clientId: crypto.randomUUID(),
+          jenis: item.jenis,
+          productId: item.productId,
+          namaSaatItu: item.nama,
+          satuanInput,
+          qtyInput,
+          dari: item.dari,
+          ke: item.ke,
+          sebab: item.sebab,
+          catatan: item.catatan,
+        };
+        const hasil = await tambahAntre(muatan);
+        if (!hasil) semuaTerkirim = false;
+      }
+      if (semuaTerkirim) {
+        idBerhasil.push(item.id);
+      } else {
+        adaGagal = true;
+      }
+    }
+
+    if (idBerhasil.length > 0) await kosongkanKeranjang(idBerhasil);
+    setErrorSimpan(
+      adaGagal ? 'Sebagian barang gagal diantre — tetap di keranjang, coba lagi.' : null,
+    );
+    await muatUlangKeranjang();
     await muatUlangDaftar();
     picuKirim();
   }
@@ -356,58 +564,6 @@ export function FormCatat(): React.JSX.Element {
         </div>
       </div>
 
-      {produkTerpilih && (
-        <div className="space-y-2">
-          <Label>Satuan</Label>
-          <div className="flex flex-wrap gap-2">
-            {satuanUrut.map((s) => (
-              <Button
-                key={s.nama}
-                type="button"
-                variant={satuanTerpilih === s.nama ? 'default' : 'outline'}
-                onClick={() => setSatuanTerpilih(s.nama)}
-              >
-                {s.nama}
-              </Button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="space-y-2">
-        <Label>Jumlah</Label>
-        <div className="flex items-center gap-3">
-          <Button
-            type="button"
-            variant="outline"
-            className="h-14 w-14 shrink-0 text-2xl"
-            disabled={jumlah <= 1}
-            onClick={() => setJumlah((j) => Math.max(1, j - 1))}
-          >
-            −
-          </Button>
-          <div className="flex-1 text-center text-3xl font-bold tabular-nums">{jumlah}</div>
-          <Button
-            type="button"
-            variant="outline"
-            className="h-14 w-14 shrink-0 text-2xl"
-            onClick={() => setJumlah((j) => j + 1)}
-          >
-            +
-          </Button>
-        </div>
-        <Input
-          type="number"
-          min={1}
-          value={jumlah}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            setJumlah(Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1);
-          }}
-          className="mx-auto w-24 text-center"
-        />
-      </div>
-
       {jenis === 'RUSAK' && (
         <div className="space-y-2">
           <Label>Sebab</Label>
@@ -433,10 +589,54 @@ export function FormCatat(): React.JSX.Element {
 
       {errorSimpan && <div className="text-sm text-destructive">{errorSimpan}</div>}
 
-      <div className="sticky bottom-0 -mx-4 border-t border-border bg-background p-4">
-        <Button className="h-12 w-full text-base" disabled={!bisaSimpan} onClick={simpan}>
-          Simpan
-        </Button>
+      <div className="space-y-2">
+        <Label>Keranjang</Label>
+        {notifHapus && (
+          <div className="flex items-center justify-between gap-2 rounded-md border border-border bg-muted p-3 text-sm">
+            <span>Entri dihapus</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void urungkanHapus()}>
+              Urungkan
+            </Button>
+          </div>
+        )}
+        {keranjang.length === 0 ? (
+          <div className="text-xs text-muted-foreground">Belum ada barang di keranjang.</div>
+        ) : (
+          <div className="flex flex-col divide-y divide-border rounded-md border border-border">
+            {keranjang.map((it) => {
+              const satuan = satuanCache[it.productId] ?? [];
+              const total = totalPokokKeranjang(it.qtySatuan, satuan);
+              return (
+                <div key={it.id} className="flex items-center gap-2 p-3">
+                  <button
+                    type="button"
+                    className="flex-1 text-left"
+                    onClick={() => void bukaSuntingBaris(it)}
+                  >
+                    <div className="font-semibold">{it.nama}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {ringkasQtySatuan(it.qtySatuan)}
+                      {total ? ` · ${total.total} ${total.namaPokok}` : ''}
+                    </div>
+                    <div className="text-xs text-muted-foreground">
+                      {it.dari ? LABEL_LOKASI[it.dari as KodeLokasi] : '-'} →{' '}
+                      {it.ke ? LABEL_LOKASI[it.ke as KodeLokasi] : '-'}
+                    </div>
+                  </button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="h-12 w-12 shrink-0"
+                    aria-label="Hapus dari keranjang"
+                    onClick={() => void hapusBaris(it.id)}
+                  >
+                    <Trash2 className="h-5 w-5" />
+                  </Button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {daftar.length > 0 && (
@@ -462,6 +662,29 @@ export function FormCatat(): React.JSX.Element {
           </div>
         </div>
       )}
+
+      {/* Tombol kirim ditaruh PALING BAWAH di DOM, bukan di atas keranjang:
+          `sticky bottom-0` berhenti menempel begitu posisi aslinya tercapai,
+          jadi kalau ia diletakkan sebelum daftar keranjang, di ujung gulir
+          tombolnya mendarat di tengah halaman dengan keranjang di bawahnya. */}
+      <div className="sticky bottom-0 -mx-4 border-t border-border bg-background p-4">
+        <Button
+          className="h-12 w-full text-base"
+          disabled={keranjang.length === 0}
+          onClick={() => void kirimSemua()}
+        >
+          Kirim semua ({keranjang.length})
+        </Button>
+      </div>
+
+      <LembarQty
+        terbuka={lembarProduk !== null}
+        namaProduk={lembarProduk?.nama ?? ''}
+        satuan={lembarProduk?.satuan ?? []}
+        nilaiAwal={lembarNilaiAwal}
+        onSimpan={simpanLembar}
+        onBatal={tutupLembar}
+      />
     </div>
   );
 }

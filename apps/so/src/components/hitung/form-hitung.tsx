@@ -7,13 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+import { LembarQty } from '@/components/catat/lembar-qty';
 import { type KodeLokasi, LABEL_LOKASI, LOKASI_NYATA, isKodeLokasi } from '@/lib/lokasi';
 import { cariLokal, katalogSiap, segarkanKatalogLokal, type ProdukRingkas } from '@/lib/katalog-lokal';
 import { formatNumber, formatWaktuWIB } from '@/lib/format';
@@ -23,6 +17,11 @@ interface BarisHitung {
   nama: string;
   satuanInput: string;
   qtyInput: number;
+  // Rincian qty per satuan dari LembarQty, mis. {"Krtn (12 Pcs)": 3, "Pcs": 1}.
+  // WAJIB opsional: draf LAMA di localStorage HP staf (sebelum lembar ini ada)
+  // tidak punya field ini, dan sesi hitung bisa berjalan berhari-hari — draf
+  // lama tidak boleh ditolak cuma karena field baru belum ada.
+  qtySatuan?: Record<string, number>;
 }
 
 interface SesiBerjalan {
@@ -49,6 +48,17 @@ function kunciDraf(sesiId: number): string {
   return `kartini.hitung.${sesiId}`;
 }
 
+// Draf lama (sebelum qtySatuan ada) tidak punya field ini sama sekali —
+// undefined di sini artinya "baris lama", bukan "rusak".
+function bacaQtySatuan(v: unknown): Record<string, number> | undefined {
+  if (typeof v !== 'object' || v === null) return undefined;
+  const hasil: Record<string, number> = {};
+  for (const [nama, n] of Object.entries(v as Record<string, unknown>)) {
+    if (typeof n === 'number' && Number.isFinite(n)) hasil[nama] = n;
+  }
+  return Object.keys(hasil).length > 0 ? hasil : undefined;
+}
+
 function bacaDraf(sesiId: number): BarisHitung[] {
   try {
     const mentah = window.localStorage.getItem(kunciDraf(sesiId));
@@ -71,6 +81,7 @@ function bacaDraf(sesiId: number): BarisHitung[] {
           nama: r.nama,
           satuanInput: r.satuanInput,
           qtyInput: r.qtyInput,
+          qtySatuan: bacaQtySatuan(r.qtySatuan),
         });
       }
     }
@@ -122,6 +133,14 @@ function pesanDari(data: Record<string, unknown> | null, baku: string): string {
   return typeof pesan === 'string' && pesan !== '' ? pesan : baku;
 }
 
+// Urutan Object.entries mengikuti urutan penulisan LembarQty.simpan() (besar
+// ke kecil), jadi rincian tampil "3 Krtn (12 Pcs) + 1 Pcs", bukan acak.
+function rincianQtySatuan(qtySatuan: Record<string, number>): string {
+  return Object.entries(qtySatuan)
+    .map(([nama, qty]) => `${formatNumber(qty)} ${nama}`)
+    .join(' + ');
+}
+
 export function FormHitung(): React.JSX.Element {
   const [memuat, setMemuat] = React.useState(true);
   const [sesi, setSesi] = React.useState<SesiBerjalan | null>(null);
@@ -136,8 +155,6 @@ export function FormHitung(): React.JSX.Element {
   const [kataKunci, setKataKunci] = React.useState('');
   const [hasilCari, setHasilCari] = React.useState<ProdukRingkas[]>([]);
   const [produkTerpilih, setProdukTerpilih] = React.useState<ProdukRingkas | null>(null);
-  const [satuanTerpilih, setSatuanTerpilih] = React.useState('');
-  const [jumlahTeks, setJumlahTeks] = React.useState('0');
 
   // ---------- muat sesi berjalan ----------
   React.useEffect(() => {
@@ -308,39 +325,52 @@ export function FormHitung(): React.JSX.Element {
 
   function pilihProduk(produk: ProdukRingkas): void {
     setProdukTerpilih(produk);
-    const sudahAda = baris.find((b) => b.productId === produk.id);
-    const satuanTerkecil = produk.satuan.reduce<{ nama: string; pengali: number } | null>(
-      (kecil, s) => (kecil === null || s.pengali < kecil.pengali ? s : kecil),
-      null,
-    );
-    setSatuanTerpilih(sudahAda?.satuanInput ?? satuanTerkecil?.nama ?? '');
-    setJumlahTeks(sudahAda ? String(sudahAda.qtyInput) : '0');
   }
 
-  function tambahBaris(): void {
+  // Barang lama dari katalog lokal bisa lenyap (dihapus/diganti id) sebelum
+  // stafnya kembali membuka baris ini — cariLokal dengan kata kunci id
+  // persis dipakai supaya kita dapat data satuan yang masih berlaku.
+  async function bukaKembali(productId: string): Promise<void> {
+    const hasil = await cariLokal(productId, 50);
+    const produk = hasil.find((p) => p.id === productId);
+    if (!produk) {
+      setGalat('Barang ini tidak ada lagi di katalog lokal, jadi tidak bisa dibuka ulang.');
+      return;
+    }
+    setGalat(null);
+    pilihProduk(produk);
+  }
+
+  function simpanLembarQty(qtySatuan: Record<string, number>, totalPokok: number): void {
     if (!sesi || !produkTerpilih) return;
-    const jumlah = Number(jumlahTeks.replace(',', '.'));
-    if (!Number.isFinite(jumlah) || jumlah < 0) {
-      setGalat('Jumlah harus angka nol atau lebih.');
-      return;
-    }
-    if (satuanTerpilih === '') {
-      setGalat('Satuan wajib dipilih.');
-      return;
-    }
     const tanpaProduk = baris.filter((b) => b.productId !== produkTerpilih.id);
     if (tanpaProduk.length >= BATAS_BARIS) {
       setGalat(`Satu sesi maksimal ${BATAS_BARIS} barang. Kirim dulu yang sudah dihitung.`);
       return;
     }
+    // OPNAME adalah angka mutlak per produk × lokasi, jadi tidak boleh dipecah
+    // jadi beberapa baris seperti layar Catat — dua baris untuk produk yang
+    // sama akan saling menimpa di server. Karena itu baris lama diGANTI di
+    // atas (tanpaProduk), bukan ditambah.
+    //
+    // satuanInput dikirim sebagai satuan dengan pengali TERKECIL milik
+    // produk ini. Pengali satuan terkecil selalu 1, jadi mengirim totalPokok
+    // (sudah dalam satuan terkecil) di satuan itu membuat konversi di server
+    // menghasilkan angka yang sama persis — server tetap menerima bentuk
+    // satuanInput + qtyInput seperti sekarang, tidak ada yang berubah di sana.
+    const satuanTerkecil = produkTerpilih.satuan.reduce<{ nama: string; pengali: number } | null>(
+      (kecil, s) => (kecil === null || s.pengali < kecil.pengali ? s : kecil),
+      null,
+    );
     setGalat(null);
     simpanBaris(sesi.id, [
       ...tanpaProduk,
       {
         productId: produkTerpilih.id,
         nama: produkTerpilih.nama,
-        satuanInput: satuanTerpilih,
-        qtyInput: jumlah,
+        satuanInput: satuanTerkecil?.nama ?? produkTerpilih.satuan[0]?.nama ?? '',
+        qtyInput: totalPokok,
+        qtySatuan,
       },
     ]);
     setProdukTerpilih(null);
@@ -355,12 +385,6 @@ export function FormHitung(): React.JSX.Element {
     );
   }
 
-  function geserJumlah(delta: number): void {
-    const sekarang = Number(jumlahTeks.replace(',', '.'));
-    const dasar = Number.isFinite(sekarang) ? sekarang : 0;
-    setJumlahTeks(String(Math.max(0, dasar + delta)));
-  }
-
   // ---------- tampilan ----------
   if (memuat) {
     return (
@@ -372,6 +396,16 @@ export function FormHitung(): React.JSX.Element {
   }
 
   const lokasiSesi = sesi && isKodeLokasi(sesi.lokasi) ? LABEL_LOKASI[sesi.lokasi] : sesi?.lokasi;
+
+  // Nilai awal LembarQty: kalau baris lama sudah punya qtySatuan pakai apa
+  // adanya; kalau draf LAMA (belum punya qtySatuan), bentuk dari
+  // satuanInput+qtyInput supaya baris itu tetap bisa dibuka dan diperbaiki.
+  const barisAktif = produkTerpilih
+    ? baris.find((b) => b.productId === produkTerpilih.id)
+    : undefined;
+  const nilaiAwalLembar = barisAktif
+    ? (barisAktif.qtySatuan ?? { [barisAktif.satuanInput]: barisAktif.qtyInput })
+    : undefined;
 
   return (
     <div className="space-y-4">
@@ -505,100 +539,39 @@ export function FormHitung(): React.JSX.Element {
               )}
             </div>
 
-            {produkTerpilih === null ? (
-              <ul className="divide-y divide-stone-200">
-                {hasilCari.map((produk) => (
-                  <li key={produk.id}>
-                    <button
-                      type="button"
-                      onClick={() => pilihProduk(produk)}
-                      className="flex w-full items-center justify-between gap-3 py-3 text-left"
-                    >
-                      <span>
-                        <span className="block font-medium text-stone-900">{produk.nama}</span>
-                        <span className="block font-mono text-xs text-stone-500">
-                          {produk.id}
-                        </span>
-                      </span>
-                      {baris.some((b) => b.productId === produk.id) && (
-                        <span className="shrink-0 rounded-full bg-[#0f7a3e] px-2 py-0.5 text-xs font-semibold text-white">
-                          sudah
-                        </span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <div className="space-y-3 rounded-lg bg-stone-50 p-3">
-                <div>
-                  <div className="font-medium text-stone-900">{produkTerpilih.nama}</div>
-                  <div className="font-mono text-xs text-stone-500">{produkTerpilih.id}</div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="satuan-hitung">Satuan</Label>
-                  <Select value={satuanTerpilih} onValueChange={setSatuanTerpilih}>
-                    <SelectTrigger id="satuan-hitung">
-                      <SelectValue placeholder="Pilih satuan" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {produkTerpilih.satuan.map((s) => (
-                        <SelectItem key={s.nama} value={s.nama}>
-                          {s.nama}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="jumlah-hitung">Jumlah dihitung</Label>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-12 w-12 shrink-0 text-lg"
-                      aria-label="Kurangi satu"
-                      onClick={() => geserJumlah(-1)}
-                    >
-                      −
-                    </Button>
-                    <Input
-                      id="jumlah-hitung"
-                      value={jumlahTeks}
-                      onChange={(e) => setJumlahTeks(e.target.value)}
-                      inputMode="decimal"
-                      className="h-12 text-center text-lg tabular-nums"
-                    />
-                    <Button
-                      type="button"
-                      variant="outline"
-                      className="h-12 w-12 shrink-0 text-lg"
-                      aria-label="Tambah satu"
-                      onClick={() => geserJumlah(1)}
-                    >
-                      +
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="flex gap-2">
-                  <Button type="button" className="h-12 flex-1" onClick={tambahBaris}>
-                    Simpan hitungan
-                  </Button>
-                  <Button
+            <ul className="divide-y divide-stone-200">
+              {hasilCari.map((produk) => (
+                <li key={produk.id}>
+                  <button
                     type="button"
-                    variant="outline"
-                    className="h-12"
-                    onClick={() => setProdukTerpilih(null)}
+                    onClick={() => pilihProduk(produk)}
+                    className="flex w-full items-center justify-between gap-3 py-3 text-left"
                   >
-                    Batal
-                  </Button>
-                </div>
-              </div>
-            )}
+                    <span>
+                      <span className="block font-medium text-stone-900">{produk.nama}</span>
+                      <span className="block font-mono text-xs text-stone-500">
+                        {produk.id}
+                      </span>
+                    </span>
+                    {baris.some((b) => b.productId === produk.id) && (
+                      <span className="shrink-0 rounded-full bg-[#0f7a3e] px-2 py-0.5 text-xs font-semibold text-white">
+                        sudah
+                      </span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
           </div>
+
+          <LembarQty
+            terbuka={produkTerpilih !== null}
+            namaProduk={produkTerpilih?.nama ?? ''}
+            satuan={produkTerpilih?.satuan ?? []}
+            nilaiAwal={nilaiAwalLembar}
+            onSimpan={simpanLembarQty}
+            onBatal={() => setProdukTerpilih(null)}
+          />
 
           <div className="rounded-xl border border-stone-200 bg-white p-4 space-y-3">
             <div className="font-semibold text-stone-900">
@@ -612,16 +585,26 @@ export function FormHitung(): React.JSX.Element {
               <ul className="divide-y divide-stone-200">
                 {baris.map((b) => (
                   <li key={b.productId} className="flex items-center justify-between gap-3 py-3">
-                    <span className="min-w-0">
-                      <span className="block truncate font-medium text-stone-900">{b.nama}</span>
-                      <span className="block font-mono text-xs text-stone-500">{b.productId}</span>
-                    </span>
-                    <span className="shrink-0 text-right">
-                      <span className="block font-semibold tabular-nums text-stone-900">
-                        {formatNumber(b.qtyInput)}
+                    <button
+                      type="button"
+                      onClick={() => void bukaKembali(b.productId)}
+                      className="flex min-h-12 min-w-0 flex-1 items-center justify-between gap-3 text-left"
+                    >
+                      <span className="min-w-0">
+                        <span className="block truncate font-medium text-stone-900">{b.nama}</span>
+                        <span className="block font-mono text-xs text-stone-500">
+                          {b.productId}
+                        </span>
                       </span>
-                      <span className="block text-xs text-stone-500">{b.satuanInput}</span>
-                    </span>
+                      <span className="shrink-0 text-right">
+                        <span className="block font-semibold tabular-nums text-stone-900">
+                          {formatNumber(b.qtyInput)}
+                        </span>
+                        <span className="block text-xs text-stone-500">
+                          {b.qtySatuan ? rincianQtySatuan(b.qtySatuan) : b.satuanInput}
+                        </span>
+                      </span>
+                    </button>
                     <Button
                       type="button"
                       variant="ghost"

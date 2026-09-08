@@ -1,9 +1,12 @@
-// Satu saklar, bukan penghapusan. Aplikasi ini jadi LAYAR LAPORAN saja —
-// staf gudang mencatat/menghitung/meninjau di aplikasi tim (repo lain, data
-// di Supabase + spreadsheet SO). Kalau `MODE_LAPORAN` true, rute tulis di
-// `RUTE_TULIS` dan menunya dimatikan supaya tidak ada dua buku besar untuk
-// gudang yang sama. Buku besar yang sah ada di aplikasi tim, bukan di sini.
-// Membalik arah cukup ubah nilai ini jadi `false`, kodenya tidak dihapus.
-export const MODE_LAPORAN = true;
+// Satu saklar, bukan penghapusan. `true` = aplikasi ini jadi LAYAR LAPORAN
+// saja: rute tulis di `RUTE_TULIS` dan menunya dimatikan, pencatatan
+// sepenuhnya di aplikasi tim. `false` = pencatatan hidup di sini juga.
+//
+// Sekarang `false`: tim minta /catat dan /hitung hidup lagi dengan lembar qty
+// multi-satuan. Selama dua aplikasi jalan berdampingan, saldo dihitung dari
+// tarikan SO sebagai dasar + Log aplikasi ini dilipat di atasnya (lihat
+// workers/cron/src/stok-so.ts), jadi tidak ada dua buku besar yang saling
+// menimpa.
+export const MODE_LAPORAN = false;
 
 export const RUTE_TULIS: readonly string[] = ['/catat', '/hitung', '/tinjau'];

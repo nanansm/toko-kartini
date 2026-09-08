@@ -2,9 +2,12 @@
 // Boleh dipakai lib lain yang butuh antrean/katalog offline.
 
 export const NAMA_DB = 'kartini';
-export const VERSI_DB = 1;
+// v2: tambah TOKO_KERANJANG — penampungan sebelum antrean, biar staf bisa
+// kumpul/ubah/hapus barang dulu sebelum sekali tekan "Kirim semua".
+export const VERSI_DB = 2;
 export const TOKO_ANTRE = 'antre'; // keyPath: 'clientId'
 export const TOKO_KATALOG = 'katalog'; // keyPath: 'kunci'
+export const TOKO_KERANJANG = 'keranjang'; // keyPath: 'id'
 
 // Cache koneksi supaya tidak buka db berkali-kali. Dibuang saat
 // koneksi ditutup/di-upgrade dari tab lain, biar panggilan berikut
@@ -36,6 +39,9 @@ function bukaBaru(): Promise<IDBDatabase | null> {
       }
       if (!db.objectStoreNames.contains(TOKO_KATALOG)) {
         db.createObjectStore(TOKO_KATALOG, { keyPath: 'kunci' });
+      }
+      if (!db.objectStoreNames.contains(TOKO_KERANJANG)) {
+        db.createObjectStore(TOKO_KERANJANG, { keyPath: 'id' });
       }
     };
 

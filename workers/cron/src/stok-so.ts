@@ -1,4 +1,5 @@
-import { batchGet } from '@kartini/sheets';
+import { batchGet, bacaLog, namaTabLog } from '@kartini/sheets';
+import { lipatSaldo } from './saldo';
 
 interface Env {
   KATALOG: KVNamespace;
@@ -27,6 +28,10 @@ export interface RingkasanStokSO {
   lokasiAsing: string[];
   skuTanpaIsi: number;
   sisaTakTerbaca: number;
+  /** Jumlah baris Log kita yang ikut dilipat di atas angka SO. 0 = tidak ada
+   *  mutasi dari aplikasi ini bulan berjalan, atau Log memang tidak dibaca. */
+  barisLog: number;
+  idTerakhir: number;
   takBerubah?: boolean;
   dibatalkan?: boolean;
   kode?: string;
@@ -81,7 +86,11 @@ function angkaSheet(mentah: string | undefined): number {
  *  Aplikasi lama ini berubah jadi layar laporan: staf memakai aplikasi tim
  *  yang lain, buku besarnya di tab Stok spreadsheet SO. Fungsi ini cuma
  *  menyalin hasilnya tiap 10 menit, tidak pernah menulis balik ke sheet. */
-export async function tarikStokSO(env: Env, sheetSoId: string): Promise<RingkasanStokSO> {
+export async function tarikStokSO(
+  env: Env,
+  sheetSoId: string,
+  sheetOpsId?: string
+): Promise<RingkasanStokSO> {
   const waktu = new Date().toISOString();
   const bulan = bulanSekarang(new Date());
 
@@ -141,6 +150,34 @@ export async function tarikStokSO(env: Env, sheetSoId: string): Promise<Ringkasa
     peta.set(kunci, (peta.get(kunci) ?? 0) + qtyPokok);
   }
 
+  // Angka dari tab Stok SO adalah DASAR, bukan hasil akhir. Selama tim masih
+  // memakai dua aplikasi berdampingan, mutasi yang dicatat di aplikasi ini
+  // tidak pernah masuk ke tab Stok mereka -- kalau saldo:v1 ditulis mentah dari
+  // SO, tiap catatan staf di sini akan terhapus lagi 10 menit kemudian dan
+  // layarnya terlihat seperti tidak menyimpan apa-apa.
+  //
+  // Log kita dilipat di atasnya lewat lipatSaldo -- fungsi yang sama yang
+  // dipakai hitungSaldo dan tutupBulan, supaya aturan lokasi maya, saldo minus,
+  // dan pelaporan kejanggalan tidak bercabang jadi dua versi.
+  //
+  // Kalau tim sudah pindah sepenuhnya, cukup lepas SHEET_SO_ID dari cron:
+  // tarikan SO berhenti, hitungSaldo hidup lagi dari Saldo_Awal + Log.
+  let barisLog = 0;
+  let idTerakhir = 0;
+  if (sheetOpsId !== undefined && sheetOpsId !== '') {
+    const dasar: BarisSaldo[] = [];
+    for (const [kunci, qty] of peta) {
+      const p = kunci.indexOf('|');
+      dasar.push({ productId: kunci.slice(0, p), lokasi: kunci.slice(p + 1), qty });
+    }
+    const log = await bacaLog(sheetOpsId, namaTabLog(new Date()));
+    barisLog = log.length;
+    const hasilLipat = lipatSaldo(dasar, log);
+    idTerakhir = hasilLipat.idTerakhir;
+    peta.clear();
+    for (const [kunci, qty] of hasilLipat.peta) peta.set(kunci, qty);
+  }
+
   const saldo: BarisSaldo[] = [];
   let totalQty = 0;
   for (const [kunci, qty] of peta) {
@@ -170,6 +207,8 @@ export async function tarikStokSO(env: Env, sheetSoId: string): Promise<Ringkasa
       lokasiAsing: [...lokasiAsing],
       skuTanpaIsi: skuAsingTanpaHarga.size,
       sisaTakTerbaca,
+    barisLog,
+    idTerakhir,
       dibatalkan: true,
       kode: 'saldo baru kosong atau menyusut lebih dari separuh',
     };
@@ -186,15 +225,15 @@ export async function tarikStokSO(env: Env, sheetSoId: string): Promise<Ringkasa
       lokasiAsing: [...lokasiAsing],
       skuTanpaIsi: skuAsingTanpaHarga.size,
       sisaTakTerbaca,
+    barisLog,
+    idTerakhir,
       takBerubah: true,
     };
   }
 
-  // idTerakhir dipatok 0: model laporan ini tidak punya tab Log, jadi tidak
-  // ada nomor urut mutasi untuk dijadikan batas susulan.
   await env.KATALOG.put(
     'saldo:v1',
-    JSON.stringify({ versi: 1, waktu, bulan, jumlah: saldo.length, idTerakhir: 0, saldo })
+    JSON.stringify({ versi: 1, waktu, bulan, jumlah: saldo.length, idTerakhir, saldo })
   );
 
   return {
@@ -205,5 +244,7 @@ export async function tarikStokSO(env: Env, sheetSoId: string): Promise<Ringkasa
     lokasiAsing: [...lokasiAsing],
     skuTanpaIsi: skuAsingTanpaHarga.size,
     sisaTakTerbaca,
+    barisLog,
+    idTerakhir,
   };
 }

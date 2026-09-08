@@ -288,19 +288,22 @@ function tokenValid(request: Request): boolean {
 // Stok Opname), bukan di sini. Cron cuma menyalin tab `Stok` milik tim ke KV
 // lalu menghitung nilai uangnya.
 //
-// `tutupBulan`, `hitungSaldo`, dan `cadangkanLog` sengaja TIDAK dipanggil lagi.
-// Ketiganya bekerja di atas tab `Log` + `Saldo_Awal` milik model lama, dan
-// `hitungSaldo` khususnya akan MENIMPA `saldo:v1` hasil tarikan dengan angka
-// yang dihitung dari Log yang sudah tidak diisi siapa pun -- artinya nilai stok
-// di Beranda balik jadi nol tiap 10 menit. Berkas saldo.ts dan bulan.ts
-// dibiarkan utuh supaya arah masih bisa dibalik tanpa menulis ulang.
+// `hitungSaldo` sengaja TIDAK dipanggil: ia menghitung saldo dari
+// `Saldo_Awal` + `Log` saja dan akan MENIMPA hasil tarikan SO tiap 10 menit --
+// stok yang dipegang aplikasi tim hilang dari layar. Selama dua aplikasi jalan
+// berdampingan, angka SO yang jadi dasar dan Log kita dilipat di atasnya di
+// dalam `tarikStokSO` (lewat `lipatSaldo`, fungsi yang sama), jadi mutasi yang
+// dicatat staf di sini tetap menggeser angkanya.
+//
+// `tutupBulan` dan `cadangkanLog` juga belum dipanggil: keduanya milik model
+// Saldo_Awal yang baru relevan setelah tarikan SO dimatikan.
 async function jalankanTugasStok(env: Env): Promise<void> {
   const sheetSoId = process.env.SHEET_SO_ID;
   if (!sheetSoId) {
     console.log('SHEET_SO_ID belum dipasang, lewati tarikStokSO');
   } else {
     try {
-      const ringkasan = await tarikStokSO(env, sheetSoId);
+      const ringkasan = await tarikStokSO(env, sheetSoId, process.env.SHEET_OPS_ID);
       console.log('tarikStokSO selesai', ringkasan);
     } catch (err) {
       console.error('tarikStokSO gagal', err);
@@ -365,7 +368,7 @@ export default {
         return jsonRespons({ ok: false, pesan: 'SHEET_SO_ID belum dipasang' }, 500);
       }
       try {
-        const ringkasan = await tarikStokSO(env, sheetSoId);
+        const ringkasan = await tarikStokSO(env, sheetSoId, process.env.SHEET_OPS_ID);
         return jsonRespons(ringkasan);
       } catch (err) {
         const pesan = err instanceof Error ? err.message : String(err);
