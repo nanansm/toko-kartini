@@ -16,12 +16,14 @@
   "durable_objects": {
     "bindings": [
       { "name": "PENULIS", "class_name": "Penulis" },
-      { "name": "GERBANG", "class_name": "Gerbang" }
+      { "name": "GERBANG", "class_name": "Gerbang" },
+      { "name": "BUKU", "class_name": "Buku" }
     ]
   },
   "migrations": [
     { "tag": "v1", "new_sqlite_classes": ["Penulis"] },
-    { "tag": "v2", "new_sqlite_classes": ["Gerbang"] }
+    { "tag": "v2", "new_sqlite_classes": ["Gerbang"] },
+    { "tag": "v3", "new_sqlite_classes": ["Buku"] }
   ],
   "observability": { "enabled": true }
 }

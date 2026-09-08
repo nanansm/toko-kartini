@@ -34,7 +34,10 @@ export interface ProdukRingkas {
   // Ditulis cron sejak katalog:cari versi 2, dipakai mengelompokkan daftar
   // pesanan. Boleh null: Pricelist punya baris tanpa supplier.
   supplier: string | null;
-  satuan: { nama: string; pengali: number }[];
+  // `sku` + `unitOrder` ikut sejak katalog:cari versi 4: tab Log dan Mutasi di
+  // spreadsheet tim menyimpan SKU per satuan, dan skrip hilir mereka
+  // (peta_satuan.py, import_penjualan.py) mencocokkan SKU itu — bukan nama.
+  satuan: { nama: string; pengali: number; sku: string; unitOrder: number }[];
 }
 
 export interface BungkusRingkas {
